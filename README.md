@@ -1,6 +1,8 @@
-# academy-shorts
+# area6-health-tips
 
-YouTube Shorts pipeline for **BISTEC Hearts Academy** — converts Sinhala lesson narrations into branded, 9:16 vertical short-form videos (≤10 seconds).
+YouTube Shorts pipeline for **Area6 / [qualitylife.lk](https://qualitylife.lk)** — converts Sinhala health tip narrations into branded, 9:16 vertical short-form videos (≤10 seconds).
+
+> Area6 branding assets (logo, colors) will be dropped in later. The pipeline currently uses `qualitylife.lk` as placeholder brand text.
 
 ---
 
@@ -14,14 +16,14 @@ extract_shorts.py  →  shorts_plan.json  (slide snippets, durations)
         │
         ▼
 shorts_gen.py  →  slide_001.mp4, slide_002.mp4, ...
-                  (TTS audio + branded video overlay)
+                  (Piper TTS audio + branded video overlay)
 ```
 
 Each output video is:
 - **1080 × 1920** (9:16 vertical, YouTube Shorts format)
 - **≤ 10 seconds** (auto-truncated if narration is too long)
 - **30 fps, H.264 / AAC**, faststart for web streaming
-- Dark gradient background with BISTEC Hearts Academy branding
+- Dark gradient background with brand text overlay
 
 ---
 
@@ -35,7 +37,6 @@ sudo apt install ffmpeg
 
 # Sinhala font (required for subtitle text rendering)
 sudo apt install fonts-noto-core
-# or: fonts-noto  (larger package with all scripts)
 ```
 
 Verify the font is available:
@@ -51,27 +52,29 @@ pip install -r requirements.txt
 
 ### 3. Piper TTS model
 
-Download the Sinhala voice model and place it in `./piper/`:
+Download the Sinhala voice model into `./piper/` — two files needed:
 
-```
-piper/
-├── si_LK-sinhala-medium.onnx
-└── si_LK-sinhala-medium.onnx.json
+```bash
+wget -P piper/ \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/si/si_LK/sinhala/medium/si_LK-sinhala-medium.onnx"
+
+wget -P piper/ \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/si/si_LK/sinhala/medium/si_LK-sinhala-medium.onnx.json"
 ```
 
-See [`piper/README.md`](piper/README.md) for download instructions.
+Model source: https://huggingface.co/rhasspy/piper-voices/tree/main/si/si_LK/sinhala/medium
 
 ---
 
 ## Usage
 
-### Generate a single Short from inline text
+### Generate a Short from inline text
 
 ```bash
 python shorts_gen.py \
-  --text "ආයුබෝවන්! BISTEC Hearts Academy වෙතින් සාදරයෙන් පිළිගනිමු." \
-  --title "Welcome" \
-  --output welcome.mp4
+  --text "ශරීරය සෞඛ්‍යමත්ව තබා ගැනීමට දිනපතා ව්‍යායාම කිරීම අත්‍යවශ්‍යයි." \
+  --title "Daily Exercise" \
+  --output tip.mp4
 ```
 
 ### Generate a Short from a specific slide
@@ -83,7 +86,7 @@ python shorts_gen.py \
   --output slide_03.mp4
 ```
 
-### Generate Shorts for all slides
+### Batch generate all slides
 
 ```bash
 python shorts_gen.py \
@@ -92,38 +95,28 @@ python shorts_gen.py \
   --outdir ./shorts/
 ```
 
-Output files will be named `slide_001.mp4`, `slide_002.mp4`, etc.
-
 ---
 
 ## Batch extraction (planning step)
 
-Before generating videos, inspect which snippets will be used and their estimated durations:
+Inspect which snippets will be extracted and their estimated durations before rendering:
 
 ```bash
 python extract_shorts.py path/to/AUDIO-NARRATIVE-SI.md --output shorts_plan.json
 ```
 
-This produces a JSON file like:
-
+Output JSON:
 ```json
 [
   {
     "slide_number": 1,
-    "title": "Introduction to GSD",
-    "text": "ගෝලීය ශිෂ්‍ය සංවර්ධනය යනු...",
+    "title": "Introduction",
+    "text": "ශරීරය...",
     "estimated_duration": 7.3,
     "word_count": 22,
     "was_truncated": false
-  },
-  ...
+  }
 ]
-```
-
-Options:
-```
---max-duration N    Override the 10-second cap (default: 10.0)
---print             Also print the plan to stdout
 ```
 
 ---
@@ -131,40 +124,16 @@ Options:
 ## Project structure
 
 ```
-academy-shorts/
+area6-health-tips/
 ├── shorts_gen.py          # Main pipeline: text → TTS → MP4
 ├── extract_shorts.py      # Extracts short snippets from narrative MD
-├── requirements.txt       # Python dependencies
+├── requirements.txt       # piper-tts, numpy
 ├── piper/
-│   ├── README.md          # Model download instructions
+│   ├── README.md          # Model download instructions (HuggingFace URLs)
 │   ├── si_LK-sinhala-medium.onnx        # (download separately)
 │   └── si_LK-sinhala-medium.onnx.json   # (download separately)
 └── README.md
 ```
-
----
-
-## Sinhala font notes
-
-FFmpeg's `drawtext` filter requires a font file that supports the Sinhala Unicode block (U+0D80–U+0DFF). The pipeline tries these paths in order:
-
-1. `/usr/share/fonts/truetype/noto/NotoSansSinhala-Regular.ttf`
-2. `/usr/share/fonts/noto/NotoSansSinhala-Regular.ttf`
-3. Fallback to NotoSans or DejaVu (Latin only — Sinhala glyphs won't render)
-
-Install the recommended font:
-```bash
-sudo apt install fonts-noto-core
-fc-cache -fv
-```
-
----
-
-## Text duration estimation
-
-The pipeline estimates speech rate at **3 words/second** for Sinhala. Text is auto-truncated to keep the video ≤10 seconds. The actual TTS output duration is used for the final video length.
-
-To adjust the rate, edit `WORDS_PER_SECOND` in `shorts_gen.py` or `extract_shorts.py`.
 
 ---
 
@@ -173,7 +142,7 @@ To adjust the rate, edit `WORDS_PER_SECOND` in `shorts_gen.py` or `extract_short
 | Symptom | Fix |
 |---------|-----|
 | `piper-tts not installed` | `pip install piper-tts` |
-| `Piper model not found` | Download `.onnx` files to `./piper/` — see `piper/README.md` |
-| Subtitle text shows boxes/tofu | Install `fonts-noto-core` and re-run |
+| `Piper model not found` | Run the `wget` commands above to download to `./piper/` |
+| Subtitle text shows boxes/tofu | `sudo apt install fonts-noto-core && fc-cache -fv` |
 | FFmpeg not found | `sudo apt install ffmpeg` |
-| Video has no audio | Check that the WAV was synthesized correctly (run TTS step in isolation) |
+| Video has no audio | Check TTS step: run `piper_to_speech.py` in isolation first |

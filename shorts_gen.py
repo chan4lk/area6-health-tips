@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-shorts_gen.py — YouTube Shorts pipeline for BISTEC Hearts Academy
+shorts_gen.py — YouTube Shorts pipeline for Area6 / qualitylife.lk
 
 Generates a 9:16 vertical video (≤10s) with Sinhala TTS narration,
 branded title, and subtitle overlay.
@@ -26,7 +26,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 PIPER_MODEL = Path(__file__).parent / "piper" / "si_LK-sinhala-medium.onnx"
-BRAND_NAME = "BISTEC Hearts Academy"
+BRAND_NAME = "qualitylife.lk"  # Area6 branding — swap with full logo in video later
 
 # Video specs
 WIDTH = 1080
@@ -384,7 +384,7 @@ def main() -> None:
         # Direct text mode
         if not args.output:
             parser.error("--output is required when using --text")
-        title = args.title or "BISTEC Hearts Academy"
+        title = args.title or "qualitylife.lk"
         print(f"\nGenerating Short: '{title}'")
         generate_short(title=title, text=args.text, output_mp4=args.output)
 

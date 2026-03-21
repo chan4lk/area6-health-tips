@@ -11,22 +11,30 @@ Place both of the following files in this `piper/` directory:
 | `si_LK-sinhala-medium.onnx` | ONNX model weights |
 | `si_LK-sinhala-medium.onnx.json` | Model config (speaker info, sample rate, etc.) |
 
-## Download
+## Download (Hugging Face)
 
-1. Go to the [Piper releases page](https://github.com/rhasspy/piper/releases)
-   or the [Hugging Face model hub](https://huggingface.co/rhasspy/piper-voices).
+Direct download links from the official [`rhasspy/piper-voices`](https://huggingface.co/rhasspy/piper-voices) repository:
 
-2. Find the `si_LK` (Sinhala, Sri Lanka) voice — look for `sinhala-medium`.
+```bash
+# Download model weights
+wget -P piper/ \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/si/si_LK/sinhala/medium/si_LK-sinhala-medium.onnx"
 
-3. Download both the `.onnx` and `.onnx.json` files.
+# Download model config
+wget -P piper/ \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/si/si_LK/sinhala/medium/si_LK-sinhala-medium.onnx.json"
+```
 
-4. Place them here:
-   ```
-   piper/
-   ├── si_LK-sinhala-medium.onnx
-   ├── si_LK-sinhala-medium.onnx.json
-   └── README.md   ← you are here
-   ```
+Or browse the model card:
+- https://huggingface.co/rhasspy/piper-voices/tree/main/si/si_LK/sinhala/medium
+
+Place them here:
+```
+piper/
+├── si_LK-sinhala-medium.onnx
+├── si_LK-sinhala-medium.onnx.json
+└── README.md   ← you are here
+```
 
 ## Verify
 
