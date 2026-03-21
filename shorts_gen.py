@@ -261,17 +261,20 @@ def build_video(
     output_mp4: str,
     duration: float,
     category: str = "",
+    highlight: str = "",
 ) -> None:
     """
     Compose the final 1080x1920 video frame using Pillow, then mux with audio via FFmpeg.
 
-    Matches the Area6 Stitch reference layout from qualitylife.lk:
-      - Pure black background (#0a0a0a)
-      - Top-left logo + "AREA 6" branding
-      - Orange "HEALTH TIP" pill badge
-      - Huge Sinhala title (last word orange)
-      - White card at bottom with left orange accent bar and body tip text
-      - Bottom bar with logo, handle, category label, and SUBSCRIBE button
+    Area6 redesign:
+      - Pure black background (#000000)
+      - Faint AREA6 watermark rotated -15° in orange
+      - Top bar: "≡ AREA6" left, logo circle top-right
+      - Orange pill badge: "HEALTH TIPS // CATEGORY"
+      - Huge Sinhala title with highlight word in orange (#f97316)
+      - Left side vertical "PERFORMANCE // AREA6" text at 40% alpha
+      - Dark semi-transparent info card with "DID YOU KNOW?" header
+      - Bottom bar: logo circle, handle, category, SUBSCRIBE pill
     """
     try:
         from PIL import Image, ImageDraw, ImageFont
@@ -295,86 +298,94 @@ def build_video(
             return ImageFont.truetype(path, size)
         return ImageFont.load_default()
 
-    fnt_area6      = load_font(font_brand_bold_path, 28)   # "AREA 6" top-left
-    fnt_pill       = load_font(font_brand_bold_path, 26)   # "HEALTH TIP" pill
-    fnt_title      = load_font(font_sinh_bold_path,  130)  # huge Sinhala title
-    fnt_title_sm   = load_font(font_sinh_bold_path,  100)  # fallback if too many lines
-    fnt_body       = load_font(font_sinh_reg_path,   46)   # body tip in card
-    fnt_handle     = load_font(font_brand_bold_path, 28)   # @AREA6_OFFICIAL
-    fnt_cat        = load_font(font_brand_reg_path,  22)   # category label
-    fnt_subscribe  = load_font(font_brand_bold_path, 24)   # SUBSCRIBE button
+    fnt_watermark = load_font(font_brand_bold_path, 380)
+    fnt_menu      = load_font(font_brand_reg_path,  40)
+    fnt_brand     = load_font(font_brand_bold_path, 44)
+    fnt_pill      = load_font(font_brand_bold_path, 24)
+    fnt_title     = load_font(font_sinh_bold_path,  140)
+    fnt_title_sm  = load_font(font_sinh_bold_path,  110)
+    fnt_vertical  = load_font(font_brand_bold_path, 20)
+    fnt_did_know  = load_font(font_brand_bold_path, 28)
+    fnt_body      = load_font(font_sinh_reg_path,   44)
+    fnt_handle    = load_font(font_brand_bold_path, 26)
+    fnt_cat       = load_font(font_brand_reg_path,  20)
+    fnt_subscribe = load_font(font_brand_bold_path, 24)
 
     # ----------------------------------------------------------------- colors
-    BG       = (10,  10,  10,  255)   # #0a0a0a
-    WHITE    = (255, 255, 255, 255)
-    ORANGE   = (249, 115, 22,  255)   # #f97316
-    ORANGE_5 = (249, 115, 22,  13)    # 5% opacity for glow
-    GRAY     = (153, 153, 153, 255)   # #999
-    DARK     = (17,  17,  17,  255)   # #111111 for card text
+    BG     = (0,   0,   0,   255)   # pure black
+    WHITE  = (255, 255, 255, 255)
+    ORANGE = (249, 115, 22,  255)   # #f97316
+    GRAY   = (153, 153, 153, 255)   # #999
 
     # ---------------------------------------------------------- base canvas
     frame = Image.new("RGBA", (WIDTH, HEIGHT), BG)
     draw  = ImageDraw.Draw(frame)
 
-    # ----------------------------------------------- subtle orange glow (bottom-left)
-    glow = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-    glow_d = ImageDraw.Draw(glow)
-    glow_d.ellipse([-100, HEIGHT - 350, 300, HEIGHT - 50], fill=ORANGE_5)
-    frame = Image.alpha_composite(frame, glow)
-    draw  = ImageDraw.Draw(frame)
+    # =======================================================================
+    # WATERMARK: "AREA6" faint, rotated 15° CCW (visual -15° tilt)
+    # =======================================================================
+    wm_canvas = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    wm_draw   = ImageDraw.Draw(wm_canvas)
+    wm_bb     = wm_draw.textbbox((0, 0), "AREA6", font=fnt_watermark)
+    wm_text_w = wm_bb[2] - wm_bb[0]
+    wm_text_h = wm_bb[3] - wm_bb[1]
+    wm_x      = (WIDTH - wm_text_w) // 2
+    wm_y      = 900 - wm_text_h // 2
+    wm_draw.text((wm_x, wm_y), "AREA6", font=fnt_watermark, fill=(249, 115, 22, 15))
+    wm_canvas = wm_canvas.rotate(15)   # 15° CCW ≈ visual -15° tilt
+    frame     = Image.alpha_composite(frame, wm_canvas)
+    draw      = ImageDraw.Draw(frame)
 
     # =======================================================================
-    # TOP BAR: logo (80x80, top-left, x=50, y=50) + "AREA 6"
+    # TOP BAR (y=40): "≡ AREA6" left, logo circle top-right (x=WIDTH-130, y=30)
     # =======================================================================
-    LOGO_X    = 50
-    LOGO_Y    = 50
+    draw.text((50, 40), "≡", font=fnt_menu, fill=WHITE)
+    menu_bb = draw.textbbox((50, 40), "≡", font=fnt_menu)
+    menu_w  = menu_bb[2] - menu_bb[0]
+    draw.text((50 + menu_w + 12, 40), "AREA6", font=fnt_brand, fill=WHITE)
+
     LOGO_SIZE = 80
-    LOGO_RAD  = 14
-
+    LOGO_X    = WIDTH - 130
+    LOGO_Y    = 30
     if LOGO_PATH.exists():
-        logo = Image.open(LOGO_PATH).convert("RGBA")
-        logo = logo.resize((LOGO_SIZE, LOGO_SIZE), Image.LANCZOS)
+        logo  = Image.open(LOGO_PATH).convert("RGBA")
+        logo  = logo.resize((LOGO_SIZE, LOGO_SIZE), Image.LANCZOS)
         lmask = Image.new("L", (LOGO_SIZE, LOGO_SIZE), 0)
-        ImageDraw.Draw(lmask).rounded_rectangle(
-            [0, 0, LOGO_SIZE - 1, LOGO_SIZE - 1], radius=LOGO_RAD, fill=255
-        )
+        ImageDraw.Draw(lmask).ellipse([0, 0, LOGO_SIZE - 1, LOGO_SIZE - 1], fill=255)
         logo.putalpha(lmask)
         frame.paste(logo, (LOGO_X, LOGO_Y), mask=logo)
-        draw = ImageDraw.Draw(frame)  # refresh after paste
-
-    area6_bbox = draw.textbbox((0, 0), "AREA 6", font=fnt_area6)
-    area6_h    = area6_bbox[3] - area6_bbox[1]
-    area6_y    = LOGO_Y + (LOGO_SIZE - area6_h) // 2
-    draw.text((LOGO_X + LOGO_SIZE + 18, area6_y), "AREA 6", font=fnt_area6, fill=WHITE)
+        draw = ImageDraw.Draw(frame)
 
     # =======================================================================
-    # ORANGE PILL BADGE: "HEALTH TIP" (y=180, x=60, ~220x60)
+    # ORANGE PILL BADGE (y=155, x=50): "HEALTH TIPS // CATEGORY"
     # =======================================================================
-    PILL_X = 60
-    PILL_Y = 180
-    PILL_W = 220
-    PILL_H = 60
+    cat_label = CATEGORY_LABELS.get(category, "PERFORMANCE & RECOVERY")
+    pill_text = f"HEALTH TIPS // {cat_label}"
+    pb        = draw.textbbox((0, 0), pill_text, font=fnt_pill)
+    pill_tw   = pb[2] - pb[0]
+    pill_th   = pb[3] - pb[1]
+    PILL_X    = 50
+    PILL_Y    = 155
+    PILL_H    = 52
+    PILL_W    = pill_tw + 40
     draw.rounded_rectangle(
         [PILL_X, PILL_Y, PILL_X + PILL_W, PILL_Y + PILL_H],
         radius=PILL_H // 2,
         fill=ORANGE,
     )
-    pill_text = "HEALTH TIP"
-    pb = draw.textbbox((0, 0), pill_text, font=fnt_pill)
     draw.text(
-        (PILL_X + (PILL_W - (pb[2] - pb[0])) // 2, PILL_Y + (PILL_H - (pb[3] - pb[1])) // 2),
+        (PILL_X + 20, PILL_Y + (PILL_H - pill_th) // 2),
         pill_text, font=fnt_pill, fill=WHITE,
     )
 
     # =======================================================================
-    # HUGE TITLE (Sinhala, left-aligned x=60, starting y=280, last word orange)
+    # HUGE TITLE (y=240, x=50): highlight word in orange, others white
     # =======================================================================
-    TITLE_X           = 60
-    TITLE_START_Y     = 280
-    TITLE_LINE_EXTRA  = 20   # extra spacing between lines
+    TITLE_X       = 50
+    TITLE_START_Y = 240
+    LINE_SPACING  = 15
 
-    def wrap_words(words: list[str], max_chars: int = 10) -> list[list[str]]:
-        """Wrap a word list into lines of at most max_chars characters."""
+    def wrap_title_words(words: list[str], max_chars: int = 8) -> list[list[str]]:
         lines: list[list[str]] = []
         current: list[str] = []
         current_len = 0
@@ -394,32 +405,44 @@ def build_video(
 
     title_words = title.split()
     title_font  = fnt_title
-    title_lines = wrap_words(title_words, max_chars=10)
-    if len(title_lines) > 4:
+    title_lines = wrap_title_words(title_words, max_chars=8)
+    if len(title_lines) > 3:
         title_font  = fnt_title_sm
-        title_lines = wrap_words(title_words, max_chars=10)
-        title_lines = title_lines[:4]  # hard cap at 4
+        title_lines = wrap_title_words(title_words, max_chars=8)
 
-    line_h = title_font.size + TITLE_LINE_EXTRA
+    line_h = title_font.size + LINE_SPACING
 
     for li, line_words in enumerate(title_lines):
-        is_last = li == len(title_lines) - 1
         y = TITLE_START_Y + li * line_h
         x = TITLE_X
-        if is_last:
-            prefix = line_words[:-1]
-            last_w = line_words[-1]
-            if prefix:
-                prefix_str = " ".join(prefix) + " "
-                draw.text((x, y), prefix_str, font=title_font, fill=WHITE)
-                pb2 = draw.textbbox((x, y), prefix_str, font=title_font)
-                x = pb2[2]
-            draw.text((x, y), last_w, font=title_font, fill=ORANGE)
-        else:
-            draw.text((x, y), " ".join(line_words), font=title_font, fill=WHITE)
+        for wi, word in enumerate(line_words):
+            is_last_word = (li == len(title_lines) - 1 and wi == len(line_words) - 1)
+            use_orange   = (highlight and word == highlight) or (not highlight and is_last_word)
+            color        = ORANGE if use_orange else WHITE
+            draw.text((x, y), word, font=title_font, fill=color)
+            wb = draw.textbbox((x, y), word + " ", font=title_font)
+            x  = wb[2]
 
     # =======================================================================
-    # WHITE CARD — dynamically sized to fit all tip text
+    # LEFT SIDE VERTICAL TEXT (x=22, vertically centered)
+    # "PERFORMANCE // AREA6" rotated 90° CCW → reads bottom to top
+    # =======================================================================
+    vert_text = "PERFORMANCE // AREA6"
+    vt_bb     = draw.textbbox((0, 0), vert_text, font=fnt_vertical)
+    vt_w      = vt_bb[2] - vt_bb[0]
+    vt_h      = vt_bb[3] - vt_bb[1]
+    vt_pad    = 4
+    vt_img    = Image.new("RGBA", (vt_w + vt_pad * 2, vt_h + vt_pad * 2), (0, 0, 0, 0))
+    ImageDraw.Draw(vt_img).text((vt_pad, vt_pad), vert_text, font=fnt_vertical,
+                                fill=(249, 115, 22, 102))
+    vt_img    = vt_img.rotate(90, expand=True)   # 90° CCW → text reads upward
+    vt_dest_x = max(0, 22 - vt_img.size[0] // 2)
+    vt_dest_y = max(0, (HEIGHT - vt_img.size[1]) // 2)
+    frame.alpha_composite(vt_img, dest=(vt_dest_x, vt_dest_y))
+    draw = ImageDraw.Draw(frame)
+
+    # =======================================================================
+    # DARK INFO CARD (bottom ~35%): semi-transparent, orange accent, DID YOU KNOW?
     # =======================================================================
     CARD_MARGIN  = 30
     CARD_X       = CARD_MARGIN
@@ -427,66 +450,72 @@ def build_video(
     CARD_RADIUS  = 24
     ACCENT_W     = 8
     BODY_PAD_X   = 30
-    BODY_PAD_Y   = 28
+    BODY_PAD_TOP = 28
+    BODY_PAD_BOT = 28
+    DYK_H        = 28 + 16   # "DID YOU KNOW?" line height + gap below
 
-    # Wrap body text and calculate how tall the card needs to be
-    body_lines  = _wrap_sinhala(subtitle_text, max_chars=22)
+    body_lines  = _wrap_sinhala(subtitle_text, max_chars=20)
     body_line_h = fnt_body.size + 14
     card_text_h = len(body_lines) * body_line_h
-    card_h      = card_text_h + BODY_PAD_Y * 2
+    card_h      = BODY_PAD_TOP + DYK_H + card_text_h + BODY_PAD_BOT
 
-    # Card sits above the bottom bar — leave 110px for bar + margin
     CARD_BOTTOM = HEIGHT - 110
     CARD_Y      = CARD_BOTTOM - card_h
 
-    # Draw full orange card first, then white card offset by ACCENT_W
-    draw.rounded_rectangle(
+    # Semi-transparent dark card + orange left accent via overlay
+    card_overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    card_draw    = ImageDraw.Draw(card_overlay)
+    card_draw.rounded_rectangle(
         [CARD_X, CARD_Y, CARD_X + CARD_W, CARD_BOTTOM],
-        radius=CARD_RADIUS, fill=ORANGE,
+        radius=CARD_RADIUS, fill=(249, 115, 22, 255),
     )
-    draw.rounded_rectangle(
+    card_draw.rounded_rectangle(
         [CARD_X + ACCENT_W, CARD_Y, CARD_X + CARD_W, CARD_BOTTOM],
-        radius=CARD_RADIUS, fill=(255, 255, 255, 255),
+        radius=CARD_RADIUS, fill=(26, 26, 26, 230),
+    )
+    frame = Image.alpha_composite(frame, card_overlay)
+    draw  = ImageDraw.Draw(frame)
+
+    draw.text(
+        (CARD_X + ACCENT_W + BODY_PAD_X, CARD_Y + BODY_PAD_TOP),
+        "DID YOU KNOW?", font=fnt_did_know, fill=ORANGE,
     )
 
-    # Body tip text — all lines, no truncation
     BODY_X = CARD_X + ACCENT_W + BODY_PAD_X
-    BODY_Y = CARD_Y + BODY_PAD_Y
+    BODY_Y = CARD_Y + BODY_PAD_TOP + DYK_H
     for i, bline in enumerate(body_lines):
-        draw.text((BODY_X, BODY_Y + i * body_line_h), bline, font=fnt_body, fill=DARK)
+        draw.text((BODY_X, BODY_Y + i * body_line_h), bline, font=fnt_body, fill=WHITE)
 
     # =======================================================================
-    # BOTTOM BAR (y ≈ 1820)
+    # BOTTOM BAR (HEIGHT-100 to HEIGHT)
     # =======================================================================
-    BAR_Y        = 1820
-    BAR_LOGO_SZ  = 60
-    BAR_LOGO_RAD = 10
+    BAR_Y = HEIGHT - 100
+    draw.rectangle([0, BAR_Y, WIDTH, HEIGHT], fill=BG)
 
+    BAR_LOGO_SZ = 60
     if LOGO_PATH.exists():
         bar_logo = Image.open(LOGO_PATH).convert("RGBA")
         bar_logo = bar_logo.resize((BAR_LOGO_SZ, BAR_LOGO_SZ), Image.LANCZOS)
         blmask   = Image.new("L", (BAR_LOGO_SZ, BAR_LOGO_SZ), 0)
-        ImageDraw.Draw(blmask).rounded_rectangle(
-            [0, 0, BAR_LOGO_SZ - 1, BAR_LOGO_SZ - 1], radius=BAR_LOGO_RAD, fill=255
-        )
+        ImageDraw.Draw(blmask).ellipse([0, 0, BAR_LOGO_SZ - 1, BAR_LOGO_SZ - 1], fill=255)
         bar_logo.putalpha(blmask)
-        frame.paste(bar_logo, (30, BAR_Y), mask=bar_logo)
+        frame.paste(bar_logo, (30, BAR_Y + 20), mask=bar_logo)
         draw = ImageDraw.Draw(frame)
 
     TEXT_X = 30 + BAR_LOGO_SZ + 16
-    draw.text((TEXT_X, BAR_Y + 2),  "@AREA6_OFFICIAL", font=fnt_handle, fill=WHITE)
-    cat_label = CATEGORY_LABELS.get(category, "PERFORMANCE & RECOVERY")
-    draw.text((TEXT_X, BAR_Y + 34), cat_label, font=fnt_cat, fill=GRAY)
+    draw.text((TEXT_X, BAR_Y + 18), "@AREA6_OFFICIAL", font=fnt_handle, fill=WHITE)
+    draw.text((TEXT_X, BAR_Y + 52), cat_label,          font=fnt_cat,    fill=GRAY)
 
-    # SUBSCRIBE pill (right-aligned)
     sub_text = "SUBSCRIBE"
-    sb = draw.textbbox((0, 0), sub_text, font=fnt_subscribe)
-    sub_tw, sub_th = sb[2] - sb[0], sb[3] - sb[1]
-    SP_X, SP_Y   = 24, 14
-    sub_pw       = sub_tw + 2 * SP_X
-    sub_ph       = sub_th + 2 * SP_Y
-    sub_px       = WIDTH - 30 - sub_pw
-    sub_py       = BAR_Y + (BAR_LOGO_SZ - sub_ph) // 2
+    sb       = draw.textbbox((0, 0), sub_text, font=fnt_subscribe)
+    sub_tw   = sb[2] - sb[0]
+    sub_th   = sb[3] - sb[1]
+    SP_X     = 24
+    SP_Y     = 14
+    sub_pw   = sub_tw + 2 * SP_X
+    sub_ph   = sub_th + 2 * SP_Y
+    sub_px   = WIDTH - 30 - sub_pw
+    sub_py   = BAR_Y + (100 - sub_ph) // 2
     draw.rounded_rectangle(
         [sub_px, sub_py, sub_px + sub_pw, sub_py + sub_ph],
         radius=sub_ph // 2, fill=ORANGE,
@@ -529,7 +558,7 @@ def build_video(
 # Core pipeline
 # ---------------------------------------------------------------------------
 
-def generate_short(title: str, text: str, output_mp4: str, category: str = "") -> None:
+def generate_short(title: str, text: str, output_mp4: str, category: str = "", highlight: str = "") -> None:
     """Full pipeline: text → TTS → video → MP4."""
     # 1. Truncate text to fit ≤10s
     text = truncate_to_fit(text)
@@ -556,6 +585,7 @@ def generate_short(title: str, text: str, output_mp4: str, category: str = "") -
             output_mp4=output_mp4,
             duration=actual_duration,
             category=category,
+            highlight=highlight,
         )
 
     print(f"  [Done] → {output_mp4}")
@@ -597,7 +627,7 @@ def main() -> None:
             parser.error("--output is required when using --tip")
         tip = load_tip(args.tip)
         print(f"\nGenerating Short: [{tip['category']}] {tip['title']}")
-        generate_short(title=tip["title"], text=tip["tip"], output_mp4=args.output, category=tip.get("category", ""))
+        generate_short(title=tip["title"], text=tip["tip"], output_mp4=args.output, category=tip.get("category", ""), highlight=tip.get("highlight", ""))
 
     elif args.all:
         outdir = Path(args.outdir)
@@ -608,7 +638,7 @@ def main() -> None:
             tip = load_tip(str(tip_path))
             output_mp4 = str(outdir / f"{tip['id']}.mp4")
             print(f"\n[{tip['category']}] {tip['title']}")
-            generate_short(title=tip["title"], text=tip["tip"], output_mp4=output_mp4, category=tip.get("category", ""))
+            generate_short(title=tip["title"], text=tip["tip"], output_mp4=output_mp4, category=tip.get("category", ""), highlight=tip.get("highlight", ""))
         print(f"\nAll done. {len(tips)} videos written to {outdir}/")
 
 
