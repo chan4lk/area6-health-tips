@@ -336,25 +336,7 @@ def build_video(
     frame     = Image.alpha_composite(frame, wm_canvas)
     draw      = ImageDraw.Draw(frame)
 
-    # =======================================================================
-    # TOP BAR (y=40): "≡ AREA6" left, logo circle top-right (x=WIDTH-130, y=30)
-    # =======================================================================
-    draw.text((50, 40), "≡", font=fnt_menu, fill=WHITE)
-    menu_bb = draw.textbbox((50, 40), "≡", font=fnt_menu)
-    menu_w  = menu_bb[2] - menu_bb[0]
-    draw.text((50 + menu_w + 12, 40), "AREA6", font=fnt_brand, fill=WHITE)
-
-    LOGO_SIZE = 80
-    LOGO_X    = WIDTH - 130
-    LOGO_Y    = 30
-    if LOGO_PATH.exists():
-        logo  = Image.open(LOGO_PATH).convert("RGBA")
-        logo  = logo.resize((LOGO_SIZE, LOGO_SIZE), Image.LANCZOS)
-        lmask = Image.new("L", (LOGO_SIZE, LOGO_SIZE), 0)
-        ImageDraw.Draw(lmask).ellipse([0, 0, LOGO_SIZE - 1, LOGO_SIZE - 1], fill=255)
-        logo.putalpha(lmask)
-        frame.paste(logo, (LOGO_X, LOGO_Y), mask=logo)
-        draw = ImageDraw.Draw(frame)
+    # Top bar is baked into the background image — skip drawing it again.
 
     # =======================================================================
     # ORANGE PILL BADGE (y=155, x=50): "HEALTH TIPS // CATEGORY"
