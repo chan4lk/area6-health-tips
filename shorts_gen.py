@@ -24,8 +24,16 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 PIPER_MODEL = Path(__file__).parent / "piper" / "si_LK-sinhala-medium.onnx"
-BRAND_NAME = "qualitylife.lk"  # Area6 branding — swap with full logo in video later
+LOGO_PATH = Path(__file__).parent / "branding" / "logo.jpg"
 TIPS_DIR = Path(__file__).parent / "content" / "tips"
+
+# Area 6 brand identity (from qualitylife.lk)
+BRAND_LINE1 = "Area 6"
+BRAND_LINE2 = "Quality Life Fitness"
+BRAND_COLOR_PRIMARY = "#f97316"    # orange-500
+BRAND_COLOR_ACCENT  = "#f59e0b"    # amber-500
+BRAND_BG_DARK       = "#030712"    # gray-950 (hero bg)
+BRAND_BG_MID        = "#111827"    # gray-900
 
 # Video specs
 WIDTH = 1080
@@ -226,64 +234,138 @@ def build_video(
     wrapped_subtitle = wrap_text(subtitle_text, max_chars_per_line=38)
     escaped_title = ffmpeg_escape(title)
     escaped_subtitle = ffmpeg_escape(wrapped_subtitle)
-    escaped_brand = ffmpeg_escape(BRAND_NAME)
+    escaped_brand1 = ffmpeg_escape(BRAND_LINE1)
+    escaped_brand2 = ffmpeg_escape(BRAND_LINE2)
 
     font_args_brand = f"fontfile={brand_font}:" if brand_font else ""
     font_args_sinhala = f"fontfile={sinhala_font}:" if sinhala_font else ""
 
+    # Logo overlay: scale to 120x120, position top-center
+    logo_filter = ""
+    has_logo = LOGO_PATH.exists()
+    if has_logo:
+        logo_filter = f"[1:v]scale=120:120[logo];[base][logo]overlay=(W-w)/2:60[with_logo];"
+        logo_input_tag = "[with_logo]"
+    else:
+        logo_input_tag = "[base]"
+
+    # Build filter chain
     vf_parts = [
-        # Gradient: draw dark blue rectangle full frame, then overlay slightly lighter at top
-        f"drawbox=x=0:y=0:w={WIDTH}:h={HEIGHT}:color=#1a1a2e@1.0:t=fill",
-        f"drawbox=x=0:y=0:w={WIDTH}:h={int(HEIGHT * 0.4)}:color=#16213e@0.6:t=fill",
-        # Brand name — top, centered, small
+        # Area 6 dark background (gray-950)
+        f"drawbox=x=0:y=0:w={WIDTH}:h={HEIGHT}:color={BRAND_BG_DARK}@1.0:t=fill",
+        # Subtle orange glow at bottom (brand energy)
+        f"drawbox=x=0:y={int(HEIGHT*0.75)}:w={WIDTH}:h={int(HEIGHT*0.25)}:color={BRAND_COLOR_PRIMARY}@0.08:t=fill",
+    ]
+
+    base_filter = ",".join(vf_parts)
+
+    # Text overlays (applied after logo if present)
+    text_parts = [
+        # "Area 6" — below logo, bold, white
         (
             f"drawtext={font_args_brand}"
-            f"text='{escaped_brand}':"
-            f"fontcolor=white:fontsize=42:alpha=0.85:"
-            f"x=(w-text_w)/2:y=80"
+            f"text='{escaped_brand1}':"
+            f"fontcolor=white:fontsize=56:alpha=1.0:"
+            f"x=(w-text_w)/2:y=200"
         ),
-        # Decorative line under brand
-        f"drawbox=x={WIDTH//2 - 200}:y=145:w=400:h=3:color=#e2b04a@0.9:t=fill",
-        # Title — centered vertically (slightly above center)
+        # "Quality Life Fitness" — subtitle brand line, orange
+        (
+            f"drawtext={font_args_brand}"
+            f"text='{escaped_brand2}':"
+            f"fontcolor={BRAND_COLOR_PRIMARY}:fontsize=36:alpha=0.95:"
+            f"x=(w-text_w)/2:y=270"
+        ),
+        # Orange accent line under brand
+        f"drawbox=x={WIDTH//2 - 220}:y=330:w=440:h=4:color={BRAND_COLOR_PRIMARY}@1.0:t=fill",
+        # Tip title — center of frame, amber/gold
         (
             f"drawtext={font_args_brand}"
             f"text='{escaped_title}':"
-            f"fontcolor=#e2b04a:fontsize=72:alpha=1.0:"
-            f"x=(w-text_w)/2:y=(h-text_h)/2-80:"
-            f"line_spacing=12"
+            f"fontcolor={BRAND_COLOR_ACCENT}:fontsize=68:alpha=1.0:"
+            f"x=(w-text_w)/2:y=(h-text_h)/2-60:"
+            f"line_spacing=10"
         ),
-        # Subtitle (Sinhala) — bottom third
+        # Sinhala tip text — bottom third, white
         (
             f"drawtext={font_args_sinhala}"
             f"text='{escaped_subtitle}':"
-            f"fontcolor=white:fontsize=52:alpha=0.95:"
-            f"x=(w-text_w)/2:y=h*0.68:"
+            f"fontcolor=white:fontsize=50:alpha=0.95:"
+            f"x=(w-text_w)/2:y=h*0.70:"
             f"line_spacing=14"
+        ),
+        # "qualitylife.lk" watermark — very bottom, subtle
+        (
+            f"drawtext={font_args_brand}"
+            f"text='qualitylife.lk':"
+            f"fontcolor={BRAND_COLOR_PRIMARY}:fontsize=30:alpha=0.7:"
+            f"x=(w-text_w)/2:y=h-60"
         ),
     ]
 
-    vf = ",".join(vf_parts)
+    if has_logo:
+        # With logo: base → logo overlay → text
+        full_filter = (
+            f"[0:v]{base_filter}[base];"
+            f"{logo_filter}"
+            f"{logo_input_tag}" + ",".join(text_parts)
+        )
+        cmd_inputs = [
+            "-f", "lavfi", "-i", f"color=c={BRAND_BG_DARK}:s={WIDTH}x{HEIGHT}:r={FPS}:d={duration:.3f}",
+            "-loop", "1", "-i", str(LOGO_PATH),
+            "-i", audio_wav,
+        ]
+        audio_stream = "2:a"
+    else:
+        full_filter = f"[0:v]{base_filter}," + ",".join(text_parts)
+        cmd_inputs = [
+            "-f", "lavfi", "-i", f"color=c={BRAND_BG_DARK}:s={WIDTH}x{HEIGHT}:r={FPS}:d={duration:.3f}",
+            "-i", audio_wav,
+        ]
+        audio_stream = "1:a"
 
-    cmd = [
-        "ffmpeg", "-y",
-        # Input 1: generated video (lavfi color source)
-        "-f", "lavfi",
-        "-i", f"color=c=#1a1a2e:s={WIDTH}x{HEIGHT}:r={FPS}:d={duration:.3f}",
-        # Input 2: TTS audio
-        "-i", audio_wav,
-        # Video filter chain
-        "-vf", vf,
-        # Encoding
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "22",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-shortest",
-        "-movflags", "+faststart",
-        "-pix_fmt", "yuv420p",
-        output_mp4,
-    ]
+    if has_logo:
+        cmd = [
+            "ffmpeg", "-y",
+            *cmd_inputs,
+            "-filter_complex", full_filter,
+            "-map", "[with_logo]" if "[with_logo]" not in full_filter else "0:v",
+            "-map", audio_stream,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+            "-c:a", "aac", "-b:a", "128k",
+            "-shortest", "-movflags", "+faststart", "-pix_fmt", "yuv420p",
+            output_mp4,
+        ]
+        # Simpler: just use -vf with logo as overlay via filter_complex
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", f"color=c={BRAND_BG_DARK}:s={WIDTH}x{HEIGHT}:r={FPS}:d={duration:.3f}",
+            "-loop", "1", "-i", str(LOGO_PATH),
+            "-i", audio_wav,
+            "-filter_complex",
+            (
+                f"[1:v]scale=120:120[logo];"
+                f"[0:v]{','.join(vf_parts)}[bg];"
+                f"[bg][logo]overlay=(W-w)/2:60[with_logo];"
+                f"[with_logo]{','.join(text_parts)}[out]"
+            ),
+            "-map", "[out]", "-map", "2:a",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+            "-c:a", "aac", "-b:a", "128k",
+            "-shortest", "-movflags", "+faststart", "-pix_fmt", "yuv420p",
+            output_mp4,
+        ]
+    else:
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", f"color=c={BRAND_BG_DARK}:s={WIDTH}x{HEIGHT}:r={FPS}:d={duration:.3f}",
+            "-i", audio_wav,
+            "-vf", ",".join(vf_parts + text_parts),
+            "-map", "0:v", "-map", "1:a",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+            "-c:a", "aac", "-b:a", "128k",
+            "-shortest", "-movflags", "+faststart", "-pix_fmt", "yuv420p",
+            output_mp4,
+        ]
 
     print(f"  [FFmpeg] Rendering video → {output_mp4}")
     result = subprocess.run(cmd, capture_output=True, text=True)
