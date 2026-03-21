@@ -299,7 +299,7 @@ def build_video(
     fnt_pill       = load_font(font_brand_bold_path, 26)   # "HEALTH TIP" pill
     fnt_title      = load_font(font_sinh_bold_path,  130)  # huge Sinhala title
     fnt_title_sm   = load_font(font_sinh_bold_path,  100)  # fallback if too many lines
-    fnt_body       = load_font(font_sinh_reg_path,   52)   # body tip in card
+    fnt_body       = load_font(font_sinh_reg_path,   46)   # body tip in card
     fnt_handle     = load_font(font_brand_bold_path, 28)   # @AREA6_OFFICIAL
     fnt_cat        = load_font(font_brand_reg_path,  22)   # category label
     fnt_subscribe  = load_font(font_brand_bold_path, 24)   # SUBSCRIBE button
@@ -419,18 +419,27 @@ def build_video(
             draw.text((x, y), " ".join(line_words), font=title_font, fill=WHITE)
 
     # =======================================================================
-    # WHITE CARD (bottom ~28%, y ≈ 1350 – 1800)
+    # WHITE CARD — dynamically sized to fit all tip text
     # =======================================================================
     CARD_MARGIN  = 30
     CARD_X       = CARD_MARGIN
-    CARD_Y       = 1350
-    CARD_BOTTOM  = 1800
     CARD_W       = WIDTH - 2 * CARD_MARGIN
     CARD_RADIUS  = 24
     ACCENT_W     = 8
+    BODY_PAD_X   = 30
+    BODY_PAD_Y   = 28
 
-    # Draw full orange card first, then white card offset by ACCENT_W so the
-    # orange left strip + rounded corners show through.
+    # Wrap body text and calculate how tall the card needs to be
+    body_lines  = _wrap_sinhala(subtitle_text, max_chars=22)
+    body_line_h = fnt_body.size + 14
+    card_text_h = len(body_lines) * body_line_h
+    card_h      = card_text_h + BODY_PAD_Y * 2
+
+    # Card sits above the bottom bar — leave 110px for bar + margin
+    CARD_BOTTOM = HEIGHT - 110
+    CARD_Y      = CARD_BOTTOM - card_h
+
+    # Draw full orange card first, then white card offset by ACCENT_W
     draw.rounded_rectangle(
         [CARD_X, CARD_Y, CARD_X + CARD_W, CARD_BOTTOM],
         radius=CARD_RADIUS, fill=ORANGE,
@@ -440,12 +449,10 @@ def build_video(
         radius=CARD_RADIUS, fill=(255, 255, 255, 255),
     )
 
-    # Body tip text inside card
-    BODY_X      = CARD_X + ACCENT_W + 30
-    BODY_Y      = CARD_Y + 30
-    body_lines  = _wrap_sinhala(subtitle_text, max_chars=16)
-    body_line_h = fnt_body.size + 16
-    for i, bline in enumerate(body_lines[:3]):
+    # Body tip text — all lines, no truncation
+    BODY_X = CARD_X + ACCENT_W + BODY_PAD_X
+    BODY_Y = CARD_Y + BODY_PAD_Y
+    for i, bline in enumerate(body_lines):
         draw.text((BODY_X, BODY_Y + i * body_line_h), bline, font=fnt_body, fill=DARK)
 
     # =======================================================================
