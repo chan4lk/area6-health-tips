@@ -28,12 +28,21 @@ LOGO_PATH = Path(__file__).parent / "branding" / "logo.jpg"
 TIPS_DIR = Path(__file__).parent / "content" / "tips"
 
 # Area 6 brand identity (from qualitylife.lk)
-BRAND_LINE1 = "Area 6"
-BRAND_LINE2 = "Quality Life Fitness"
 BRAND_COLOR_PRIMARY = "#f97316"    # orange-500
-BRAND_COLOR_ACCENT  = "#f59e0b"    # amber-500
-BRAND_BG_DARK       = "#030712"    # gray-950 (hero bg)
-BRAND_BG_MID        = "#111827"    # gray-900
+
+# Category label mapping for bottom bar
+CATEGORY_LABELS: dict[str, str] = {
+    "sleep":      "SLEEP & RECOVERY",
+    "exercise":   "FITNESS",
+    "nutrition":  "NUTRITION",
+    "hydration":  "HYDRATION",
+    "mental":     "MENTAL HEALTH",
+    "posture":    "POSTURE",
+    "habits":     "HEALTHY HABITS",
+    "recovery":   "RECOVERY",
+    "breathing":  "BREATHING",
+    "gut-health": "GUT HEALTH",
+}
 
 # Video specs
 WIDTH = 1080
@@ -251,23 +260,18 @@ def build_video(
     audio_wav: str,
     output_mp4: str,
     duration: float,
+    category: str = "",
 ) -> None:
     """
     Compose the final 1080x1920 video frame using Pillow, then mux with audio via FFmpeg.
 
-    Using Pillow (instead of FFmpeg drawtext) ensures correct rendering of Sinhala
-    complex script — FFmpeg's drawtext filter cannot handle the ligature shaping
-    required by Sinhala Unicode text.
-
-    Layout:
-      - Dark background (#030712) filling the full frame
-      - Area 6 logo (120x120, rounded corners) centered at top
-      - "Area 6" (NotoSans-Bold, 56px, white) below logo
-      - "Quality Life Fitness" (NotoSans-Regular, 36px, #f97316 orange) below that
-      - Orange separator line (440x4px, #f97316)
-      - Tip title (NotoSansSinhala, 68px, #f59e0b amber) vertically centered
-      - Tip body (NotoSansSinhala, 50px, white) in bottom 30% of frame
-      - "qualitylife.lk" watermark (30px, #f97316, 70% alpha) at very bottom
+    Matches the Area6 Stitch reference layout from qualitylife.lk:
+      - Pure black background (#0a0a0a)
+      - Top-left logo + "AREA 6" branding
+      - Orange "HEALTH TIP" pill badge
+      - Huge Sinhala title (last word orange)
+      - White card at bottom with left orange accent bar and body tip text
+      - Bottom bar with logo, handle, category label, and SUBSCRIBE button
     """
     try:
         from PIL import Image, ImageDraw, ImageFont
@@ -281,7 +285,6 @@ def build_video(
     font_sinh_bold_path  = "/usr/share/fonts/truetype/noto/NotoSansSinhala-Bold.ttf"
     font_sinh_reg_path   = "/usr/share/fonts/truetype/noto/NotoSansSinhala-Regular.ttf"
 
-    # Fallback to Regular if Bold variant is missing
     if not os.path.exists(font_sinh_bold_path):
         font_sinh_bold_path = font_sinh_reg_path
     if not os.path.exists(font_brand_bold_path):
@@ -290,94 +293,201 @@ def build_video(
     def load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
         if os.path.exists(path):
             return ImageFont.truetype(path, size)
-        # Last-resort fallback to Pillow's built-in bitmap font
         return ImageFont.load_default()
 
-    fnt_brand_name  = load_font(font_brand_bold_path, 56)   # "Area 6"
-    fnt_brand_sub   = load_font(font_brand_reg_path,  36)   # "Quality Life Fitness"
-    fnt_title       = load_font(font_sinh_bold_path,  68)   # Sinhala title
-    fnt_tip         = load_font(font_sinh_reg_path,   50)   # Sinhala tip body
-    fnt_watermark   = load_font(font_brand_reg_path,  30)   # watermark
+    fnt_area6      = load_font(font_brand_bold_path, 28)   # "AREA 6" top-left
+    fnt_pill       = load_font(font_brand_bold_path, 26)   # "HEALTH TIP" pill
+    fnt_title      = load_font(font_sinh_bold_path,  130)  # huge Sinhala title
+    fnt_title_sm   = load_font(font_sinh_bold_path,  100)  # fallback if too many lines
+    fnt_body       = load_font(font_sinh_reg_path,   52)   # body tip in card
+    fnt_handle     = load_font(font_brand_bold_path, 28)   # @AREA6_OFFICIAL
+    fnt_cat        = load_font(font_brand_reg_path,  22)   # category label
+    fnt_subscribe  = load_font(font_brand_bold_path, 24)   # SUBSCRIBE button
 
-    # --------------------------------------------------------------- colours
-    bg_color      = _hex_to_rgb(BRAND_BG_DARK)           # #030712
-    orange        = _hex_to_rgb(BRAND_COLOR_PRIMARY)      # #f97316
-    amber         = _hex_to_rgb(BRAND_COLOR_ACCENT)       # #f59e0b
-    white         = (255, 255, 255, 255)
-    orange_full   = (*orange, 255)
-    amber_full    = (*amber,  255)
-    orange_70     = (*orange, int(255 * 0.70))            # watermark alpha
+    # ----------------------------------------------------------------- colors
+    BG       = (10,  10,  10,  255)   # #0a0a0a
+    WHITE    = (255, 255, 255, 255)
+    ORANGE   = (249, 115, 22,  255)   # #f97316
+    ORANGE_5 = (249, 115, 22,  13)    # 5% opacity for glow
+    GRAY     = (153, 153, 153, 255)   # #999
+    DARK     = (17,  17,  17,  255)   # #111111 for card text
 
     # ---------------------------------------------------------- base canvas
-    frame = Image.new("RGBA", (WIDTH, HEIGHT), (*bg_color, 255))
+    frame = Image.new("RGBA", (WIDTH, HEIGHT), BG)
     draw  = ImageDraw.Draw(frame)
 
-    # --------------------------------------------------- logo (top-center)
-    LOGO_Y      = 60
-    LOGO_SIZE   = 120
-    LOGO_RADIUS = 24   # rounded-corner radius
+    # ----------------------------------------------- subtle orange glow (bottom-left)
+    glow = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    glow_d = ImageDraw.Draw(glow)
+    glow_d.ellipse([-100, HEIGHT - 350, 300, HEIGHT - 50], fill=ORANGE_5)
+    frame = Image.alpha_composite(frame, glow)
+    draw  = ImageDraw.Draw(frame)
+
+    # =======================================================================
+    # TOP BAR: logo (80x80, top-left, x=50, y=50) + "AREA 6"
+    # =======================================================================
+    LOGO_X    = 50
+    LOGO_Y    = 50
+    LOGO_SIZE = 80
+    LOGO_RAD  = 14
 
     if LOGO_PATH.exists():
         logo = Image.open(LOGO_PATH).convert("RGBA")
         logo = logo.resize((LOGO_SIZE, LOGO_SIZE), Image.LANCZOS)
-
-        # Build a circular/rounded-corner mask
-        mask = Image.new("L", (LOGO_SIZE, LOGO_SIZE), 0)
-        mask_draw = ImageDraw.Draw(mask)
-        mask_draw.rounded_rectangle(
-            [0, 0, LOGO_SIZE - 1, LOGO_SIZE - 1],
-            radius=LOGO_RADIUS,
-            fill=255,
+        lmask = Image.new("L", (LOGO_SIZE, LOGO_SIZE), 0)
+        ImageDraw.Draw(lmask).rounded_rectangle(
+            [0, 0, LOGO_SIZE - 1, LOGO_SIZE - 1], radius=LOGO_RAD, fill=255
         )
-        logo.putalpha(mask)
+        logo.putalpha(lmask)
+        frame.paste(logo, (LOGO_X, LOGO_Y), mask=logo)
+        draw = ImageDraw.Draw(frame)  # refresh after paste
 
-        logo_x = (WIDTH - LOGO_SIZE) // 2
-        frame.paste(logo, (logo_x, LOGO_Y), mask=logo)
+    area6_bbox = draw.textbbox((0, 0), "AREA 6", font=fnt_area6)
+    area6_h    = area6_bbox[3] - area6_bbox[1]
+    area6_y    = LOGO_Y + (LOGO_SIZE - area6_h) // 2
+    draw.text((LOGO_X + LOGO_SIZE + 18, area6_y), "AREA 6", font=fnt_area6, fill=WHITE)
 
-    # ------------------------------------------- brand text below logo
-    BRAND_NAME_Y = LOGO_Y + LOGO_SIZE + 20   # ≈ 200
-    _draw_text_centered(draw, BRAND_LINE1, fnt_brand_name, BRAND_NAME_Y, WIDTH, white)
+    # =======================================================================
+    # ORANGE PILL BADGE: "HEALTH TIP" (y=180, x=60, ~220x60)
+    # =======================================================================
+    PILL_X = 60
+    PILL_Y = 180
+    PILL_W = 220
+    PILL_H = 60
+    draw.rounded_rectangle(
+        [PILL_X, PILL_Y, PILL_X + PILL_W, PILL_Y + PILL_H],
+        radius=PILL_H // 2,
+        fill=ORANGE,
+    )
+    pill_text = "HEALTH TIP"
+    pb = draw.textbbox((0, 0), pill_text, font=fnt_pill)
+    draw.text(
+        (PILL_X + (PILL_W - (pb[2] - pb[0])) // 2, PILL_Y + (PILL_H - (pb[3] - pb[1])) // 2),
+        pill_text, font=fnt_pill, fill=WHITE,
+    )
 
-    BRAND_SUB_Y = BRAND_NAME_Y + 70          # ≈ 270
-    _draw_text_centered(draw, BRAND_LINE2, fnt_brand_sub, BRAND_SUB_Y, WIDTH, orange_full)
+    # =======================================================================
+    # HUGE TITLE (Sinhala, left-aligned x=60, starting y=280, last word orange)
+    # =======================================================================
+    TITLE_X           = 60
+    TITLE_START_Y     = 280
+    TITLE_LINE_EXTRA  = 20   # extra spacing between lines
 
-    # ----------------------------------------------- orange separator line
-    SEP_Y      = BRAND_SUB_Y + 50            # ≈ 320
-    SEP_W      = 440
-    SEP_H      = 4
-    sep_x      = (WIDTH - SEP_W) // 2
-    draw.rectangle([sep_x, SEP_Y, sep_x + SEP_W, SEP_Y + SEP_H], fill=orange_full)
+    def wrap_words(words: list[str], max_chars: int = 10) -> list[list[str]]:
+        """Wrap a word list into lines of at most max_chars characters."""
+        lines: list[list[str]] = []
+        current: list[str] = []
+        current_len = 0
+        for word in words:
+            wl  = len(word)
+            sep = 1 if current else 0
+            if current and current_len + sep + wl > max_chars:
+                lines.append(current)
+                current     = [word]
+                current_len = wl
+            else:
+                current.append(word)
+                current_len += sep + wl
+        if current:
+            lines.append(current)
+        return lines
 
-    # ------------------------------------------------ Sinhala title (center)
-    # Measure title height and center it vertically in the upper-mid region
-    title_bbox = draw.textbbox((0, 0), title, font=fnt_title)
-    title_h    = title_bbox[3] - title_bbox[1]
-    TITLE_Y    = (HEIGHT // 2) - (title_h // 2) - 60
-    _draw_text_centered(draw, title, fnt_title, TITLE_Y, WIDTH, amber_full)
+    title_words = title.split()
+    title_font  = fnt_title
+    title_lines = wrap_words(title_words, max_chars=10)
+    if len(title_lines) > 4:
+        title_font  = fnt_title_sm
+        title_lines = wrap_words(title_words, max_chars=10)
+        title_lines = title_lines[:4]  # hard cap at 4
 
-    # ------------------------------------------- Sinhala tip body (bottom 30%)
-    # Word-wrap at ~18 Sinhala chars per line, then stack lines from y=70%
-    tip_lines  = _wrap_sinhala(subtitle_text, max_chars=18)
-    LINE_H     = fnt_tip.size + 18   # font size + inter-line gap
-    TIP_START_Y = int(HEIGHT * 0.70)
+    line_h = title_font.size + TITLE_LINE_EXTRA
 
-    for i, line in enumerate(tip_lines):
-        y = TIP_START_Y + i * LINE_H
-        if y + LINE_H > HEIGHT - 80:
-            # Clip lines that overflow into the watermark zone
-            break
-        _draw_text_centered(draw, line, fnt_tip, y, WIDTH, white)
+    for li, line_words in enumerate(title_lines):
+        is_last = li == len(title_lines) - 1
+        y = TITLE_START_Y + li * line_h
+        x = TITLE_X
+        if is_last:
+            prefix = line_words[:-1]
+            last_w = line_words[-1]
+            if prefix:
+                prefix_str = " ".join(prefix) + " "
+                draw.text((x, y), prefix_str, font=title_font, fill=WHITE)
+                pb2 = draw.textbbox((x, y), prefix_str, font=title_font)
+                x = pb2[2]
+            draw.text((x, y), last_w, font=title_font, fill=ORANGE)
+        else:
+            draw.text((x, y), " ".join(line_words), font=title_font, fill=WHITE)
 
-    # --------------------------------------------------- watermark (bottom)
-    WATERMARK_Y = HEIGHT - 65
-    wm_layer    = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-    wm_draw     = ImageDraw.Draw(wm_layer)
-    _draw_text_centered(wm_draw, "qualitylife.lk", fnt_watermark, WATERMARK_Y, WIDTH, orange_70)
-    frame = Image.alpha_composite(frame, wm_layer)
+    # =======================================================================
+    # WHITE CARD (bottom ~28%, y ≈ 1350 – 1800)
+    # =======================================================================
+    CARD_MARGIN  = 30
+    CARD_X       = CARD_MARGIN
+    CARD_Y       = 1350
+    CARD_BOTTOM  = 1800
+    CARD_W       = WIDTH - 2 * CARD_MARGIN
+    CARD_RADIUS  = 24
+    ACCENT_W     = 8
+
+    # Draw full orange card first, then white card offset by ACCENT_W so the
+    # orange left strip + rounded corners show through.
+    draw.rounded_rectangle(
+        [CARD_X, CARD_Y, CARD_X + CARD_W, CARD_BOTTOM],
+        radius=CARD_RADIUS, fill=ORANGE,
+    )
+    draw.rounded_rectangle(
+        [CARD_X + ACCENT_W, CARD_Y, CARD_X + CARD_W, CARD_BOTTOM],
+        radius=CARD_RADIUS, fill=(255, 255, 255, 255),
+    )
+
+    # Body tip text inside card
+    BODY_X      = CARD_X + ACCENT_W + 30
+    BODY_Y      = CARD_Y + 30
+    body_lines  = _wrap_sinhala(subtitle_text, max_chars=16)
+    body_line_h = fnt_body.size + 16
+    for i, bline in enumerate(body_lines[:3]):
+        draw.text((BODY_X, BODY_Y + i * body_line_h), bline, font=fnt_body, fill=DARK)
+
+    # =======================================================================
+    # BOTTOM BAR (y ≈ 1820)
+    # =======================================================================
+    BAR_Y        = 1820
+    BAR_LOGO_SZ  = 60
+    BAR_LOGO_RAD = 10
+
+    if LOGO_PATH.exists():
+        bar_logo = Image.open(LOGO_PATH).convert("RGBA")
+        bar_logo = bar_logo.resize((BAR_LOGO_SZ, BAR_LOGO_SZ), Image.LANCZOS)
+        blmask   = Image.new("L", (BAR_LOGO_SZ, BAR_LOGO_SZ), 0)
+        ImageDraw.Draw(blmask).rounded_rectangle(
+            [0, 0, BAR_LOGO_SZ - 1, BAR_LOGO_SZ - 1], radius=BAR_LOGO_RAD, fill=255
+        )
+        bar_logo.putalpha(blmask)
+        frame.paste(bar_logo, (30, BAR_Y), mask=bar_logo)
+        draw = ImageDraw.Draw(frame)
+
+    TEXT_X = 30 + BAR_LOGO_SZ + 16
+    draw.text((TEXT_X, BAR_Y + 2),  "@AREA6_OFFICIAL", font=fnt_handle, fill=WHITE)
+    cat_label = CATEGORY_LABELS.get(category, "PERFORMANCE & RECOVERY")
+    draw.text((TEXT_X, BAR_Y + 34), cat_label, font=fnt_cat, fill=GRAY)
+
+    # SUBSCRIBE pill (right-aligned)
+    sub_text = "SUBSCRIBE"
+    sb = draw.textbbox((0, 0), sub_text, font=fnt_subscribe)
+    sub_tw, sub_th = sb[2] - sb[0], sb[3] - sb[1]
+    SP_X, SP_Y   = 24, 14
+    sub_pw       = sub_tw + 2 * SP_X
+    sub_ph       = sub_th + 2 * SP_Y
+    sub_px       = WIDTH - 30 - sub_pw
+    sub_py       = BAR_Y + (BAR_LOGO_SZ - sub_ph) // 2
+    draw.rounded_rectangle(
+        [sub_px, sub_py, sub_px + sub_pw, sub_py + sub_ph],
+        radius=sub_ph // 2, fill=ORANGE,
+    )
+    draw.text((sub_px + SP_X, sub_py + SP_Y), sub_text, font=fnt_subscribe, fill=WHITE)
 
     # ---------------------------------------------------- save frame as PNG
     frame_rgb = frame.convert("RGB")
-
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png:
         frame_path = tmp_png.name
     frame_rgb.save(frame_path, "PNG")
@@ -398,7 +508,6 @@ def build_video(
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
 
-    # Clean up temp frame regardless of FFmpeg outcome
     try:
         os.unlink(frame_path)
     except OSError:
@@ -413,7 +522,7 @@ def build_video(
 # Core pipeline
 # ---------------------------------------------------------------------------
 
-def generate_short(title: str, text: str, output_mp4: str) -> None:
+def generate_short(title: str, text: str, output_mp4: str, category: str = "") -> None:
     """Full pipeline: text → TTS → video → MP4."""
     # 1. Truncate text to fit ≤10s
     text = truncate_to_fit(text)
@@ -439,6 +548,7 @@ def generate_short(title: str, text: str, output_mp4: str) -> None:
             audio_wav=wav_path,
             output_mp4=output_mp4,
             duration=actual_duration,
+            category=category,
         )
 
     print(f"  [Done] → {output_mp4}")
@@ -480,7 +590,7 @@ def main() -> None:
             parser.error("--output is required when using --tip")
         tip = load_tip(args.tip)
         print(f"\nGenerating Short: [{tip['category']}] {tip['title']}")
-        generate_short(title=tip["title"], text=tip["tip"], output_mp4=args.output)
+        generate_short(title=tip["title"], text=tip["tip"], output_mp4=args.output, category=tip.get("category", ""))
 
     elif args.all:
         outdir = Path(args.outdir)
@@ -491,7 +601,7 @@ def main() -> None:
             tip = load_tip(str(tip_path))
             output_mp4 = str(outdir / f"{tip['id']}.mp4")
             print(f"\n[{tip['category']}] {tip['title']}")
-            generate_short(title=tip["title"], text=tip["tip"], output_mp4=output_mp4)
+            generate_short(title=tip["title"], text=tip["tip"], output_mp4=output_mp4, category=tip.get("category", ""))
         print(f"\nAll done. {len(tips)} videos written to {outdir}/")
 
 
