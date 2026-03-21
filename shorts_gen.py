@@ -172,6 +172,9 @@ def synthesize_tts(text: str, output_wav: str) -> None:
     Requires piper-tts package and si_LK-sinhala-medium.onnx model in ./piper/.
     """
     try:
+        import warnings
+        warnings.filterwarnings("ignore")
+        import numpy as np
         from piper import PiperVoice  # type: ignore
     except ImportError:
         print("ERROR: piper-tts not installed. Run: pip install piper-tts", file=sys.stderr)
@@ -185,11 +188,14 @@ def synthesize_tts(text: str, output_wav: str) -> None:
         )
         sys.exit(1)
 
-    print(f"  [TTS] Synthesizing speech → {output_wav}")
+    print(f"  [TTS] Loading Piper model...", end=" ", flush=True)
     voice = PiperVoice.load(str(PIPER_MODEL))
+    print("done")
+    print(f"  [TTS] Synthesizing speech → {output_wav}")
 
-    with wave.open(output_wav, "w") as wav_file:
-        voice.synthesize(text, wav_file)
+    # synthesize_wav sets WAV format automatically (channels, rate, bit depth)
+    with wave.open(output_wav, "wb") as wf:
+        voice.synthesize_wav(text, wf, set_wav_format=True)
 
 
 # ---------------------------------------------------------------------------
