@@ -1,29 +1,26 @@
 # area6-health-tips
 
-YouTube Shorts pipeline for **Area6 / [qualitylife.lk](https://qualitylife.lk)** — converts Sinhala health tip narrations into branded, 9:16 vertical short-form videos (≤10 seconds).
-
-> Area6 branding assets (logo, colors) will be dropped in later. The pipeline currently uses `qualitylife.lk` as placeholder brand text.
+YouTube Shorts pipeline for **Area6 / [qualitylife.lk](https://qualitylife.lk)** — generates branded 9:16 vertical Sinhala health tip videos (≤10 seconds) with Piper TTS narration.
 
 ---
 
 ## Overview
 
 ```
-AUDIO-NARRATIVE-SI.md
+content/tips/*.json   (one JSON file per health tip)
         │
         ▼
-extract_shorts.py  →  shorts_plan.json  (slide snippets, durations)
+shorts_gen.py  →  Piper TTS (Sinhala audio) + FFmpeg (branded video)
         │
         ▼
-shorts_gen.py  →  slide_001.mp4, slide_002.mp4, ...
-                  (Piper TTS audio + branded video overlay)
+output/hydration.mp4, output/sleep.mp4, ...
 ```
 
 Each output video is:
 - **1080 × 1920** (9:16 vertical, YouTube Shorts format)
 - **≤ 10 seconds** (auto-truncated if narration is too long)
 - **30 fps, H.264 / AAC**, faststart for web streaming
-- Dark gradient background with brand text overlay
+- Dark gradient background with `qualitylife.lk` brand overlay
 
 ---
 
@@ -68,55 +65,39 @@ Model: https://huggingface.co/chan4lk/piper-tts-sinhala
 
 ## Usage
 
-### Generate a Short from inline text
+### Generate one Short from a tip file
 
 ```bash
-python shorts_gen.py \
-  --text "ශරීරය සෞඛ්‍යමත්ව තබා ගැනීමට දිනපතා ව්‍යායාම කිරීම අත්‍යවශ්‍යයි." \
-  --title "Daily Exercise" \
-  --output tip.mp4
+python3 shorts_gen.py --tip content/tips/hydration.json --output output/hydration.mp4
 ```
 
-### Generate a Short from a specific slide
+### Generate all Shorts at once
 
 ```bash
-python shorts_gen.py \
-  --narrative path/to/AUDIO-NARRATIVE-SI.md \
-  --slide 3 \
-  --output slide_03.mp4
-```
-
-### Batch generate all slides
-
-```bash
-python shorts_gen.py \
-  --narrative path/to/AUDIO-NARRATIVE-SI.md \
-  --all \
-  --outdir ./shorts/
+python3 shorts_gen.py --all --outdir output/
+# or equivalently:
+python3 generate_all.py
 ```
 
 ---
 
-## Batch extraction (planning step)
+## Adding new tips
 
-Inspect which snippets will be extracted and their estimated durations before rendering:
+Create a new file in `content/tips/` following this schema:
 
-```bash
-python extract_shorts.py path/to/AUDIO-NARRATIVE-SI.md --output shorts_plan.json
+```json
+{
+  "id": "unique-slug",
+  "title": "Short catchy title in Sinhala (shown on screen)",
+  "category": "hydration|sleep|exercise|nutrition|mental|posture|habits",
+  "tip": "The actual narration — professional but friendly tone. ~25-30 Sinhala words.",
+  "hashtags": ["#qualitylife", "#සෞඛ්‍යය", "..."]
+}
 ```
 
-Output JSON:
-```json
-[
-  {
-    "slide_number": 1,
-    "title": "Introduction",
-    "text": "ශරීරය...",
-    "estimated_duration": 7.3,
-    "word_count": 22,
-    "was_truncated": false
-  }
-]
+Then run:
+```bash
+python3 shorts_gen.py --tip content/tips/your-tip.json --output output/your-tip.mp4
 ```
 
 ---
@@ -125,14 +106,23 @@ Output JSON:
 
 ```
 area6-health-tips/
-├── shorts_gen.py          # Main pipeline: text → TTS → MP4
-├── extract_shorts.py      # Extracts short snippets from narrative MD
+├── shorts_gen.py          # Main pipeline: tip JSON → TTS → MP4
+├── generate_all.py        # Batch runner for all tips
 ├── requirements.txt       # piper-tts, numpy
+├── content/
+│   └── tips/              # One JSON file per health tip
+│       ├── hydration.json
+│       ├── sleep.json
+│       ├── exercise.json
+│       ├── nutrition.json
+│       ├── mental.json
+│       ├── posture.json
+│       └── habits.json
 ├── piper/
-│   ├── README.md          # Model download instructions (HuggingFace URLs)
+│   ├── README.md                        # Model download instructions
 │   ├── si_LK-sinhala-medium.onnx        # (download separately)
 │   └── si_LK-sinhala-medium.onnx.json   # (download separately)
-└── README.md
+└── output/                # Generated MP4s (git-ignored)
 ```
 
 ---
@@ -145,4 +135,3 @@ area6-health-tips/
 | `Piper model not found` | Run the `wget` commands above to download to `./piper/` |
 | Subtitle text shows boxes/tofu | `sudo apt install fonts-noto-core && fc-cache -fv` |
 | FFmpeg not found | `sudo apt install ffmpeg` |
-| Video has no audio | Check TTS step: run `piper_to_speech.py` in isolation first |

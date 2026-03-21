@@ -3,18 +3,16 @@
 shorts_gen.py — YouTube Shorts pipeline for Area6 / qualitylife.lk
 
 Generates a 9:16 vertical video (≤10s) with Sinhala TTS narration,
-branded title, and subtitle overlay.
+branded title, and subtitle overlay from a JSON tip file.
 
 Usage:
-    python shorts_gen.py --text "your sinhala text" --title "Slide Title" --output out.mp4
-    python shorts_gen.py --narrative path/to/AUDIO-NARRATIVE-SI.md --slide 1 --output out.mp4
-    python shorts_gen.py --narrative path/to/AUDIO-NARRATIVE-SI.md --all --outdir ./shorts/
+    python3 shorts_gen.py --tip content/tips/hydration.json --output output/hydration.mp4
+    python3 shorts_gen.py --all --outdir output/
 """
 
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -27,6 +25,7 @@ from pathlib import Path
 
 PIPER_MODEL = Path(__file__).parent / "piper" / "si_LK-sinhala-medium.onnx"
 BRAND_NAME = "qualitylife.lk"  # Area6 branding — swap with full logo in video later
+TIPS_DIR = Path(__file__).parent / "content" / "tips"
 
 # Video specs
 WIDTH = 1080
@@ -115,50 +114,35 @@ def wrap_text(text: str, max_chars_per_line: int = 40) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Narrative parser
+# Content loader
 # ---------------------------------------------------------------------------
 
-def parse_narrative(md_path: str) -> list[dict]:
-    """
-    Parse an AUDIO-NARRATIVE-SI.md file.
-
-    Returns a list of dicts with keys:
-        slide_number (int), title (str), text (str)
-    """
-    text = Path(md_path).read_text(encoding="utf-8")
-    # Split on slide headings: ## Slide N — Title
-    pattern = re.compile(
-        r"^##\s+Slide\s+(\d+)\s*[—–-]+\s*(.+)$", re.MULTILINE
-    )
-
-    slides = []
-    matches = list(pattern.finditer(text))
-
-    for i, match in enumerate(matches):
-        slide_num = int(match.group(1))
-        title = match.group(2).strip()
-
-        # Content is between this heading and the next separator or heading
-        start = match.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        content = text[start:end]
-
-        # Strip leading/trailing whitespace and remove trailing ---
-        content = re.sub(r"\n---\s*$", "", content.strip())
-        content = content.strip()
-
-        slides.append({"slide_number": slide_num, "title": title, "text": content})
-
-    return slides
+def load_tip(json_path: str) -> dict:
+    """Load a tip JSON file and return its contents."""
+    path = Path(json_path)
+    if not path.exists():
+        print(f"ERROR: Tip file not found: {json_path}", file=sys.stderr)
+        sys.exit(1)
+    with path.open(encoding="utf-8") as f:
+        tip = json.load(f)
+    required = {"id", "title", "tip"}
+    missing = required - tip.keys()
+    if missing:
+        print(f"ERROR: Tip file {json_path} is missing fields: {missing}", file=sys.stderr)
+        sys.exit(1)
+    return tip
 
 
-def get_slide(md_path: str, slide_number: int) -> dict:
-    """Return a single slide dict by number."""
-    slides = parse_narrative(md_path)
-    for slide in slides:
-        if slide["slide_number"] == slide_number:
-            return slide
-    raise ValueError(f"Slide {slide_number} not found in {md_path}")
+def list_all_tips() -> list[Path]:
+    """Return all JSON tip files in content/tips/, sorted by name."""
+    if not TIPS_DIR.exists():
+        print(f"ERROR: Tips directory not found: {TIPS_DIR}", file=sys.stderr)
+        sys.exit(1)
+    tips = sorted(TIPS_DIR.glob("*.json"))
+    if not tips:
+        print(f"ERROR: No .json files found in {TIPS_DIR}", file=sys.stderr)
+        sys.exit(1)
+    return tips
 
 
 # ---------------------------------------------------------------------------
@@ -243,12 +227,6 @@ def build_video(
     escaped_title = ffmpeg_escape(title)
     escaped_subtitle = ffmpeg_escape(wrapped_subtitle)
     escaped_brand = ffmpeg_escape(BRAND_NAME)
-
-    # Build FFmpeg filter chain
-    # 1. Gradient background via two colored rectangles (top→bottom blend)
-    # 2. Brand name at top
-    # 3. Title in center
-    # 4. Subtitle at bottom third
 
     font_args_brand = f"fontfile={brand_font}:" if brand_font else ""
     font_args_sinhala = f"fontfile={sinhala_font}:" if sinhala_font else ""
@@ -355,73 +333,49 @@ def generate_short(title: str, text: str, output_mp4: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate YouTube Shorts from Sinhala narration text."
+        description="Generate YouTube Shorts from Sinhala health tip JSON files."
     )
 
     # Input modes
     input_group = parser.add_mutually_exclusive_group(required=True)
-    input_group.add_argument("--text", help="Sinhala narration text to use directly")
     input_group.add_argument(
-        "--narrative", help="Path to AUDIO-NARRATIVE-SI.md file"
+        "--tip",
+        help="Path to a single tip JSON file (e.g. content/tips/hydration.json)",
     )
-
-    # Narrative sub-options
-    parser.add_argument(
-        "--slide", type=int, help="Slide number to extract from narrative"
-    )
-    parser.add_argument(
+    input_group.add_argument(
         "--all",
         action="store_true",
-        help="Process all slides from narrative",
+        help="Process all tips in content/tips/ and write to --outdir",
     )
 
     # Output options
-    parser.add_argument("--title", default="", help="Slide/video title text")
-    parser.add_argument("--output", help="Output MP4 file path (single slide mode)")
+    parser.add_argument("--output", help="Output MP4 file path (single tip mode)")
     parser.add_argument(
         "--outdir",
-        default="./shorts",
-        help="Output directory for --all mode (default: ./shorts)",
+        default="./output",
+        help="Output directory for --all mode (default: ./output)",
     )
 
     args = parser.parse_args()
 
-    if args.text:
-        # Direct text mode
+    if args.tip:
         if not args.output:
-            parser.error("--output is required when using --text")
-        title = args.title or "qualitylife.lk"
-        print(f"\nGenerating Short: '{title}'")
-        generate_short(title=title, text=args.text, output_mp4=args.output)
+            parser.error("--output is required when using --tip")
+        tip = load_tip(args.tip)
+        print(f"\nGenerating Short: [{tip['category']}] {tip['title']}")
+        generate_short(title=tip["title"], text=tip["tip"], output_mp4=args.output)
 
-    elif args.narrative:
-        if args.all:
-            # Batch mode: process all slides
-            outdir = Path(args.outdir)
-            outdir.mkdir(parents=True, exist_ok=True)
-            slides = parse_narrative(args.narrative)
-            print(f"\nProcessing {len(slides)} slides → {outdir}/")
-            for slide in slides:
-                output_mp4 = str(outdir / f"slide_{slide['slide_number']:03d}.mp4")
-                print(f"\n[Slide {slide['slide_number']}] {slide['title']}")
-                generate_short(
-                    title=slide["title"],
-                    text=slide["text"],
-                    output_mp4=output_mp4,
-                )
-        elif args.slide:
-            # Single slide from narrative
-            if not args.output:
-                parser.error("--output is required when using --narrative --slide N")
-            slide = get_slide(args.narrative, args.slide)
-            print(f"\nGenerating Short: Slide {slide['slide_number']} — {slide['title']}")
-            generate_short(
-                title=slide["title"],
-                text=slide["text"],
-                output_mp4=args.output,
-            )
-        else:
-            parser.error("With --narrative, specify --slide N or --all")
+    elif args.all:
+        outdir = Path(args.outdir)
+        outdir.mkdir(parents=True, exist_ok=True)
+        tips = list_all_tips()
+        print(f"\nProcessing {len(tips)} tips → {outdir}/")
+        for tip_path in tips:
+            tip = load_tip(str(tip_path))
+            output_mp4 = str(outdir / f"{tip['id']}.mp4")
+            print(f"\n[{tip['category']}] {tip['title']}")
+            generate_short(title=tip["title"], text=tip["tip"], output_mp4=output_mp4)
+        print(f"\nAll done. {len(tips)} videos written to {outdir}/")
 
 
 if __name__ == "__main__":
