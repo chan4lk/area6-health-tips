@@ -52,17 +52,17 @@ pip install -r requirements.txt
 
 ### 3. Piper TTS model
 
-Download the Sinhala voice model into `./piper/` — two files needed:
+Download the custom Sinhala model (trained on OpenSLR 30) into `./piper/`:
 
 ```bash
 wget -P piper/ \
-  "https://huggingface.co/rhasspy/piper-voices/resolve/main/si/si_LK/sinhala/medium/si_LK-sinhala-medium.onnx"
+  "https://huggingface.co/chan4lk/piper-tts-sinhala/resolve/main/si_LK-sinhala-medium.onnx"
 
 wget -P piper/ \
-  "https://huggingface.co/rhasspy/piper-voices/resolve/main/si/si_LK/sinhala/medium/si_LK-sinhala-medium.onnx.json"
+  "https://huggingface.co/chan4lk/piper-tts-sinhala/resolve/main/si_LK-sinhala-medium.onnx.json"
 ```
 
-Model source: https://huggingface.co/rhasspy/piper-voices/tree/main/si/si_LK/sinhala/medium
+Model: https://huggingface.co/chan4lk/piper-tts-sinhala
 
 ---
 

@@ -13,20 +13,18 @@ Place both of the following files in this `piper/` directory:
 
 ## Download (Hugging Face)
 
-Direct download links from the official [`rhasspy/piper-voices`](https://huggingface.co/rhasspy/piper-voices) repository:
+This pipeline uses the custom Sinhala model trained on OpenSLR 30:
+**https://huggingface.co/chan4lk/piper-tts-sinhala**
 
 ```bash
 # Download model weights
 wget -P piper/ \
-  "https://huggingface.co/rhasspy/piper-voices/resolve/main/si/si_LK/sinhala/medium/si_LK-sinhala-medium.onnx"
+  "https://huggingface.co/chan4lk/piper-tts-sinhala/resolve/main/si_LK-sinhala-medium.onnx"
 
 # Download model config
 wget -P piper/ \
-  "https://huggingface.co/rhasspy/piper-voices/resolve/main/si/si_LK/sinhala/medium/si_LK-sinhala-medium.onnx.json"
+  "https://huggingface.co/chan4lk/piper-tts-sinhala/resolve/main/si_LK-sinhala-medium.onnx.json"
 ```
-
-Or browse the model card:
-- https://huggingface.co/rhasspy/piper-voices/tree/main/si/si_LK/sinhala/medium
 
 Place them here:
 ```
