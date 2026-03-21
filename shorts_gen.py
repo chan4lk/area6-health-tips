@@ -194,6 +194,57 @@ def synthesize_tts(text: str, output_wav: str) -> None:
 # Video generation
 # ---------------------------------------------------------------------------
 
+def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    """Convert a #rrggbb hex string to an (R, G, B) tuple."""
+    h = hex_color.lstrip("#")
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _wrap_sinhala(text: str, max_chars: int = 18) -> list[str]:
+    """
+    Word-wrap Sinhala text into lines of at most max_chars characters.
+    Sinhala glyphs are wide, so we use a tighter limit than Latin text.
+    """
+    words = text.split()
+    lines: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for word in words:
+        word_len = len(word)
+        if current and current_len + 1 + word_len > max_chars:
+            lines.append(" ".join(current))
+            current = [word]
+            current_len = word_len
+        else:
+            if current:
+                current_len += 1  # space
+            current.append(word)
+            current_len += word_len
+
+    if current:
+        lines.append(" ".join(current))
+
+    return lines
+
+
+def _draw_text_centered(
+    draw,
+    text: str,
+    font,
+    y: int,
+    canvas_width: int,
+    fill: tuple,
+) -> int:
+    """Draw text horizontally centered on the canvas. Returns the text height."""
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+    x = (canvas_width - text_w) // 2
+    draw.text((x, y), text, font=font, fill=fill)
+    return text_h
+
+
 def build_video(
     title: str,
     subtitle_text: str,
@@ -202,173 +253,157 @@ def build_video(
     duration: float,
 ) -> None:
     """
-    Compose the final video using FFmpeg.
+    Compose the final 1080x1920 video frame using Pillow, then mux with audio via FFmpeg.
 
-    Layout (1080x1920, 9:16 vertical):
-      - Dark gradient background (#1a1a2e → #16213e)
-      - Brand name at top (small, white)
-      - Title in center (large, gold/white)
-      - Subtitle (Sinhala) in bottom third (white, word-wrapped)
+    Using Pillow (instead of FFmpeg drawtext) ensures correct rendering of Sinhala
+    complex script — FFmpeg's drawtext filter cannot handle the ligature shaping
+    required by Sinhala Unicode text.
+
+    Layout:
+      - Dark background (#030712) filling the full frame
+      - Area 6 logo (120x120, rounded corners) centered at top
+      - "Area 6" (NotoSans-Bold, 56px, white) below logo
+      - "Quality Life Fitness" (NotoSans-Regular, 36px, #f97316 orange) below that
+      - Orange separator line (440x4px, #f97316)
+      - Tip title (NotoSansSinhala, 68px, #f59e0b amber) vertically centered
+      - Tip body (NotoSansSinhala, 50px, white) in bottom 30% of frame
+      - "qualitylife.lk" watermark (30px, #f97316, 70% alpha) at very bottom
     """
-    sinhala_font = find_font(SINHALA_FONT_CANDIDATES)
-    brand_font = find_font(BRAND_FONT_CANDIDATES)
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        print("ERROR: Pillow not installed. Run: pip install Pillow", file=sys.stderr)
+        sys.exit(1)
 
-    if not sinhala_font:
-        print(
-            "WARNING: No Sinhala-capable font found. Text may not render correctly.\n"
-            "Install a Sinhala font (e.g. fonts-noto-core) for proper rendering.",
-            file=sys.stderr,
+    # ------------------------------------------------------------------ fonts
+    font_brand_bold_path = "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"
+    font_brand_reg_path  = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
+    font_sinh_bold_path  = "/usr/share/fonts/truetype/noto/NotoSansSinhala-Bold.ttf"
+    font_sinh_reg_path   = "/usr/share/fonts/truetype/noto/NotoSansSinhala-Regular.ttf"
+
+    # Fallback to Regular if Bold variant is missing
+    if not os.path.exists(font_sinh_bold_path):
+        font_sinh_bold_path = font_sinh_reg_path
+    if not os.path.exists(font_brand_bold_path):
+        font_brand_bold_path = font_brand_reg_path
+
+    def load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+        # Last-resort fallback to Pillow's built-in bitmap font
+        return ImageFont.load_default()
+
+    fnt_brand_name  = load_font(font_brand_bold_path, 56)   # "Area 6"
+    fnt_brand_sub   = load_font(font_brand_reg_path,  36)   # "Quality Life Fitness"
+    fnt_title       = load_font(font_sinh_bold_path,  68)   # Sinhala title
+    fnt_tip         = load_font(font_sinh_reg_path,   50)   # Sinhala tip body
+    fnt_watermark   = load_font(font_brand_reg_path,  30)   # watermark
+
+    # --------------------------------------------------------------- colours
+    bg_color      = _hex_to_rgb(BRAND_BG_DARK)           # #030712
+    orange        = _hex_to_rgb(BRAND_COLOR_PRIMARY)      # #f97316
+    amber         = _hex_to_rgb(BRAND_COLOR_ACCENT)       # #f59e0b
+    white         = (255, 255, 255, 255)
+    orange_full   = (*orange, 255)
+    amber_full    = (*amber,  255)
+    orange_70     = (*orange, int(255 * 0.70))            # watermark alpha
+
+    # ---------------------------------------------------------- base canvas
+    frame = Image.new("RGBA", (WIDTH, HEIGHT), (*bg_color, 255))
+    draw  = ImageDraw.Draw(frame)
+
+    # --------------------------------------------------- logo (top-center)
+    LOGO_Y      = 60
+    LOGO_SIZE   = 120
+    LOGO_RADIUS = 24   # rounded-corner radius
+
+    if LOGO_PATH.exists():
+        logo = Image.open(LOGO_PATH).convert("RGBA")
+        logo = logo.resize((LOGO_SIZE, LOGO_SIZE), Image.LANCZOS)
+
+        # Build a circular/rounded-corner mask
+        mask = Image.new("L", (LOGO_SIZE, LOGO_SIZE), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.rounded_rectangle(
+            [0, 0, LOGO_SIZE - 1, LOGO_SIZE - 1],
+            radius=LOGO_RADIUS,
+            fill=255,
         )
-        sinhala_font = brand_font or ""
+        logo.putalpha(mask)
 
-    if not brand_font:
-        brand_font = sinhala_font or ""
+        logo_x = (WIDTH - LOGO_SIZE) // 2
+        frame.paste(logo, (logo_x, LOGO_Y), mask=logo)
 
-    # Escape text for FFmpeg drawtext (colons, backslashes, quotes are special)
-    def ffmpeg_escape(s: str) -> str:
-        s = s.replace("\\", "\\\\")
-        s = s.replace("'", "\u2019")   # replace straight apostrophe with typographic
-        s = s.replace(":", r"\:")
-        return s
+    # ------------------------------------------- brand text below logo
+    BRAND_NAME_Y = LOGO_Y + LOGO_SIZE + 20   # ≈ 200
+    _draw_text_centered(draw, BRAND_LINE1, fnt_brand_name, BRAND_NAME_Y, WIDTH, white)
 
-    wrapped_subtitle = wrap_text(subtitle_text, max_chars_per_line=38)
-    escaped_title = ffmpeg_escape(title)
-    escaped_subtitle = ffmpeg_escape(wrapped_subtitle)
-    escaped_brand1 = ffmpeg_escape(BRAND_LINE1)
-    escaped_brand2 = ffmpeg_escape(BRAND_LINE2)
+    BRAND_SUB_Y = BRAND_NAME_Y + 70          # ≈ 270
+    _draw_text_centered(draw, BRAND_LINE2, fnt_brand_sub, BRAND_SUB_Y, WIDTH, orange_full)
 
-    font_args_brand = f"fontfile={brand_font}:" if brand_font else ""
-    font_args_sinhala = f"fontfile={sinhala_font}:" if sinhala_font else ""
+    # ----------------------------------------------- orange separator line
+    SEP_Y      = BRAND_SUB_Y + 50            # ≈ 320
+    SEP_W      = 440
+    SEP_H      = 4
+    sep_x      = (WIDTH - SEP_W) // 2
+    draw.rectangle([sep_x, SEP_Y, sep_x + SEP_W, SEP_Y + SEP_H], fill=orange_full)
 
-    # Logo overlay: scale to 120x120, position top-center
-    logo_filter = ""
-    has_logo = LOGO_PATH.exists()
-    if has_logo:
-        logo_filter = f"[1:v]scale=120:120[logo];[base][logo]overlay=(W-w)/2:60[with_logo];"
-        logo_input_tag = "[with_logo]"
-    else:
-        logo_input_tag = "[base]"
+    # ------------------------------------------------ Sinhala title (center)
+    # Measure title height and center it vertically in the upper-mid region
+    title_bbox = draw.textbbox((0, 0), title, font=fnt_title)
+    title_h    = title_bbox[3] - title_bbox[1]
+    TITLE_Y    = (HEIGHT // 2) - (title_h // 2) - 60
+    _draw_text_centered(draw, title, fnt_title, TITLE_Y, WIDTH, amber_full)
 
-    # Build filter chain
-    vf_parts = [
-        # Area 6 dark background (gray-950)
-        f"drawbox=x=0:y=0:w={WIDTH}:h={HEIGHT}:color={BRAND_BG_DARK}@1.0:t=fill",
-        # Subtle orange glow at bottom (brand energy)
-        f"drawbox=x=0:y={int(HEIGHT*0.75)}:w={WIDTH}:h={int(HEIGHT*0.25)}:color={BRAND_COLOR_PRIMARY}@0.08:t=fill",
+    # ------------------------------------------- Sinhala tip body (bottom 30%)
+    # Word-wrap at ~18 Sinhala chars per line, then stack lines from y=70%
+    tip_lines  = _wrap_sinhala(subtitle_text, max_chars=18)
+    LINE_H     = fnt_tip.size + 18   # font size + inter-line gap
+    TIP_START_Y = int(HEIGHT * 0.70)
+
+    for i, line in enumerate(tip_lines):
+        y = TIP_START_Y + i * LINE_H
+        if y + LINE_H > HEIGHT - 80:
+            # Clip lines that overflow into the watermark zone
+            break
+        _draw_text_centered(draw, line, fnt_tip, y, WIDTH, white)
+
+    # --------------------------------------------------- watermark (bottom)
+    WATERMARK_Y = HEIGHT - 65
+    wm_layer    = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+    wm_draw     = ImageDraw.Draw(wm_layer)
+    _draw_text_centered(wm_draw, "qualitylife.lk", fnt_watermark, WATERMARK_Y, WIDTH, orange_70)
+    frame = Image.alpha_composite(frame, wm_layer)
+
+    # ---------------------------------------------------- save frame as PNG
+    frame_rgb = frame.convert("RGB")
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png:
+        frame_path = tmp_png.name
+    frame_rgb.save(frame_path, "PNG")
+    print(f"  [Pillow] Frame saved → {frame_path}")
+
+    # ------------------------------------------ FFmpeg: static frame + audio
+    print(f"  [FFmpeg] Muxing video → {output_mp4}")
+    cmd = [
+        "ffmpeg", "-y",
+        "-loop", "1", "-i", frame_path,
+        "-i", audio_wav,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-c:a", "aac", "-b:a", "128k",
+        "-shortest",
+        "-movflags", "+faststart",
+        "-pix_fmt", "yuv420p",
+        output_mp4,
     ]
-
-    base_filter = ",".join(vf_parts)
-
-    # Text overlays (applied after logo if present)
-    text_parts = [
-        # "Area 6" — below logo, bold, white
-        (
-            f"drawtext={font_args_brand}"
-            f"text='{escaped_brand1}':"
-            f"fontcolor=white:fontsize=56:alpha=1.0:"
-            f"x=(w-text_w)/2:y=200"
-        ),
-        # "Quality Life Fitness" — subtitle brand line, orange
-        (
-            f"drawtext={font_args_brand}"
-            f"text='{escaped_brand2}':"
-            f"fontcolor={BRAND_COLOR_PRIMARY}:fontsize=36:alpha=0.95:"
-            f"x=(w-text_w)/2:y=270"
-        ),
-        # Orange accent line under brand
-        f"drawbox=x={WIDTH//2 - 220}:y=330:w=440:h=4:color={BRAND_COLOR_PRIMARY}@1.0:t=fill",
-        # Tip title — center of frame, amber/gold
-        (
-            f"drawtext={font_args_brand}"
-            f"text='{escaped_title}':"
-            f"fontcolor={BRAND_COLOR_ACCENT}:fontsize=68:alpha=1.0:"
-            f"x=(w-text_w)/2:y=(h-text_h)/2-60:"
-            f"line_spacing=10"
-        ),
-        # Sinhala tip text — bottom third, white
-        (
-            f"drawtext={font_args_sinhala}"
-            f"text='{escaped_subtitle}':"
-            f"fontcolor=white:fontsize=50:alpha=0.95:"
-            f"x=(w-text_w)/2:y=h*0.70:"
-            f"line_spacing=14"
-        ),
-        # "qualitylife.lk" watermark — very bottom, subtle
-        (
-            f"drawtext={font_args_brand}"
-            f"text='qualitylife.lk':"
-            f"fontcolor={BRAND_COLOR_PRIMARY}:fontsize=30:alpha=0.7:"
-            f"x=(w-text_w)/2:y=h-60"
-        ),
-    ]
-
-    if has_logo:
-        # With logo: base → logo overlay → text
-        full_filter = (
-            f"[0:v]{base_filter}[base];"
-            f"{logo_filter}"
-            f"{logo_input_tag}" + ",".join(text_parts)
-        )
-        cmd_inputs = [
-            "-f", "lavfi", "-i", f"color=c={BRAND_BG_DARK}:s={WIDTH}x{HEIGHT}:r={FPS}:d={duration:.3f}",
-            "-loop", "1", "-i", str(LOGO_PATH),
-            "-i", audio_wav,
-        ]
-        audio_stream = "2:a"
-    else:
-        full_filter = f"[0:v]{base_filter}," + ",".join(text_parts)
-        cmd_inputs = [
-            "-f", "lavfi", "-i", f"color=c={BRAND_BG_DARK}:s={WIDTH}x{HEIGHT}:r={FPS}:d={duration:.3f}",
-            "-i", audio_wav,
-        ]
-        audio_stream = "1:a"
-
-    if has_logo:
-        cmd = [
-            "ffmpeg", "-y",
-            *cmd_inputs,
-            "-filter_complex", full_filter,
-            "-map", "[with_logo]" if "[with_logo]" not in full_filter else "0:v",
-            "-map", audio_stream,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-            "-c:a", "aac", "-b:a", "128k",
-            "-shortest", "-movflags", "+faststart", "-pix_fmt", "yuv420p",
-            output_mp4,
-        ]
-        # Simpler: just use -vf with logo as overlay via filter_complex
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i", f"color=c={BRAND_BG_DARK}:s={WIDTH}x{HEIGHT}:r={FPS}:d={duration:.3f}",
-            "-loop", "1", "-i", str(LOGO_PATH),
-            "-i", audio_wav,
-            "-filter_complex",
-            (
-                f"[1:v]scale=120:120[logo];"
-                f"[0:v]{','.join(vf_parts)}[bg];"
-                f"[bg][logo]overlay=(W-w)/2:60[with_logo];"
-                f"[with_logo]{','.join(text_parts)}[out]"
-            ),
-            "-map", "[out]", "-map", "2:a",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-            "-c:a", "aac", "-b:a", "128k",
-            "-shortest", "-movflags", "+faststart", "-pix_fmt", "yuv420p",
-            output_mp4,
-        ]
-    else:
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i", f"color=c={BRAND_BG_DARK}:s={WIDTH}x{HEIGHT}:r={FPS}:d={duration:.3f}",
-            "-i", audio_wav,
-            "-vf", ",".join(vf_parts + text_parts),
-            "-map", "0:v", "-map", "1:a",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "22",
-            "-c:a", "aac", "-b:a", "128k",
-            "-shortest", "-movflags", "+faststart", "-pix_fmt", "yuv420p",
-            output_mp4,
-        ]
-
-    print(f"  [FFmpeg] Rendering video → {output_mp4}")
     result = subprocess.run(cmd, capture_output=True, text=True)
+
+    # Clean up temp frame regardless of FFmpeg outcome
+    try:
+        os.unlink(frame_path)
+    except OSError:
+        pass
+
     if result.returncode != 0:
         print("FFmpeg error:", result.stderr[-2000:], file=sys.stderr)
         sys.exit(1)
