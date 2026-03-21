@@ -1,0 +1,15 @@
+# Model files — download via piper/README.md instructions
+piper/*.onnx
+piper/*.onnx.json
+
+# Generated output
+output/
+*.mp4
+*.wav
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
