@@ -55,6 +55,7 @@ WORDS_PER_SECOND = 3
 
 # Font paths to try (Sinhala-capable Unicode font required)
 SINHALA_FONT_CANDIDATES = [
+    str(Path.home() / ".local/share/fonts/NotoSansSinhala-Regular.ttf"),
     "/usr/share/fonts/truetype/noto/NotoSansSinhala-Regular.ttf",
     "/usr/share/fonts/noto/NotoSansSinhala-Regular.ttf",
     "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
@@ -63,6 +64,7 @@ SINHALA_FONT_CANDIDATES = [
 ]
 
 BRAND_FONT_CANDIDATES = [
+    str(Path.home() / ".local/share/fonts/NotoSans-Bold.ttf"),
     "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
