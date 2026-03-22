@@ -339,7 +339,10 @@ def build_video(
     GRAY   = (153, 153, 153, 255)   # #999
 
     # ---------------------------------------------------------- base canvas
-    bg_path = Path(__file__).parent / "branding" / "background.png"
+    # Try category-specific background first, then fallback to default
+    bg_cat_path = Path(__file__).parent / "branding" / "backgrounds" / f"{category}.png"
+    bg_default_path = Path(__file__).parent / "branding" / "background.png"
+    bg_path = bg_cat_path if bg_cat_path.exists() else bg_default_path
     if bg_path.exists():
         bg_img = Image.open(bg_path).convert("RGBA")
         bg_img = bg_img.resize((WIDTH, HEIGHT), Image.LANCZOS)
