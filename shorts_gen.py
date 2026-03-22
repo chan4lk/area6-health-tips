@@ -285,10 +285,29 @@ def build_video(
         sys.exit(1)
 
     # ------------------------------------------------------------------ fonts
-    font_brand_bold_path = "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"
-    font_brand_reg_path  = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
-    font_sinh_bold_path  = "/usr/share/fonts/truetype/noto/NotoSansSinhala-Bold.ttf"
-    font_sinh_reg_path   = "/usr/share/fonts/truetype/noto/NotoSansSinhala-Regular.ttf"
+    _home = str(Path.home())
+    font_brand_bold_path = find_font([
+        f"{_home}/.local/share/fonts/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ])
+    font_brand_reg_path  = find_font([
+        f"{_home}/.local/share/fonts/NotoSans-Regular.ttf",
+        f"{_home}/.local/share/fonts/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ])
+    font_sinh_bold_path  = find_font([
+        f"{_home}/.local/share/fonts/NotoSansSinhala-Bold.ttf",
+        f"{_home}/.local/share/fonts/NotoSansSinhala-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansSinhala-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansSinhala-Regular.ttf",
+    ])
+    font_sinh_reg_path   = find_font([
+        f"{_home}/.local/share/fonts/NotoSansSinhala-Regular.ttf",
+        f"{_home}/.local/share/fonts/NotoSansSinhala-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansSinhala-Regular.ttf",
+    ])
 
     if not os.path.exists(font_sinh_bold_path):
         font_sinh_bold_path = font_sinh_reg_path
@@ -320,23 +339,25 @@ def build_video(
     GRAY   = (153, 153, 153, 255)   # #999
 
     # ---------------------------------------------------------- base canvas
-    frame = Image.new("RGBA", (WIDTH, HEIGHT), BG)
+    bg_path = Path(__file__).parent / "branding" / "background.png"
+    if bg_path.exists():
+        bg_img = Image.open(bg_path).convert("RGBA")
+        bg_img = bg_img.resize((WIDTH, HEIGHT), Image.LANCZOS)
+        frame = bg_img
+    else:
+        frame = Image.new("RGBA", (WIDTH, HEIGHT), BG)
+        # Fallback watermark when no background image
+        wm_canvas = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+        wm_draw   = ImageDraw.Draw(wm_canvas)
+        wm_bb     = wm_draw.textbbox((0, 0), "AREA6", font=fnt_watermark)
+        wm_text_w = wm_bb[2] - wm_bb[0]
+        wm_text_h = wm_bb[3] - wm_bb[1]
+        wm_x      = (WIDTH - wm_text_w) // 2
+        wm_y      = 900 - wm_text_h // 2
+        wm_draw.text((wm_x, wm_y), "AREA6", font=fnt_watermark, fill=(249, 115, 22, 15))
+        wm_canvas = wm_canvas.rotate(15)
+        frame     = Image.alpha_composite(frame, wm_canvas)
     draw  = ImageDraw.Draw(frame)
-
-    # =======================================================================
-    # WATERMARK: "AREA6" faint, rotated 15° CCW (visual -15° tilt)
-    # =======================================================================
-    wm_canvas = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-    wm_draw   = ImageDraw.Draw(wm_canvas)
-    wm_bb     = wm_draw.textbbox((0, 0), "AREA6", font=fnt_watermark)
-    wm_text_w = wm_bb[2] - wm_bb[0]
-    wm_text_h = wm_bb[3] - wm_bb[1]
-    wm_x      = (WIDTH - wm_text_w) // 2
-    wm_y      = 900 - wm_text_h // 2
-    wm_draw.text((wm_x, wm_y), "AREA6", font=fnt_watermark, fill=(249, 115, 22, 15))
-    wm_canvas = wm_canvas.rotate(15)   # 15° CCW ≈ visual -15° tilt
-    frame     = Image.alpha_composite(frame, wm_canvas)
-    draw      = ImageDraw.Draw(frame)
 
     # Top bar is baked into the background image — skip drawing it again.
 

@@ -1,42 +1,52 @@
 {
+  "breathing-box": {
+    "videoId": "vI8PPtpJQFY",
+    "url": "https://youtube.com/shorts/vI8PPtpJQFY",
+    "uploadedAt": "2026-03-22T07:03:56.677Z"
+  },
+  "breathing-deep": {
+    "videoId": "gZg_cfMv88E",
+    "url": "https://youtube.com/shorts/gZg_cfMv88E",
+    "uploadedAt": "2026-03-22T07:04:01.335Z"
+  },
+  "breathing-exercise": {
+    "videoId": "sgcA-Ng2L9c",
+    "url": "https://youtube.com/shorts/sgcA-Ng2L9c",
+    "uploadedAt": "2026-03-22T07:04:06.021Z"
+  },
+  "breathing-oxygen-boost": {
+    "videoId": "GtDe5B9QRCw",
+    "url": "https://youtube.com/shorts/GtDe5B9QRCw",
+    "uploadedAt": "2026-03-22T07:04:10.682Z"
+  },
   "breathing-stress-relief": {
-    "videoId": "gN8IFOtWviQ",
-    "url": "https://youtube.com/shorts/gN8IFOtWviQ",
-    "uploadedAt": "2026-03-22T06:33:41.768Z"
+    "videoId": "4zcLSt9pkh4",
+    "url": "https://youtube.com/shorts/4zcLSt9pkh4",
+    "uploadedAt": "2026-03-22T07:04:15.335Z"
   },
   "drink-water-daily": {
-    "videoId": "H76EGfwDnks",
-    "url": "https://youtube.com/shorts/H76EGfwDnks",
-    "uploadedAt": "2026-03-22T06:33:46.892Z"
+    "videoId": "hLA5CbDhw9Q",
+    "url": "https://youtube.com/shorts/hLA5CbDhw9Q",
+    "uploadedAt": "2026-03-22T07:04:20.017Z"
+  },
+  "exercise-activity": {
+    "videoId": "FhvpDZwrR54",
+    "url": "https://youtube.com/shorts/FhvpDZwrR54",
+    "uploadedAt": "2026-03-22T07:04:24.701Z"
   },
   "exercise-daily-stretching": {
-    "videoId": "J3-qjc76P4I",
-    "url": "https://youtube.com/shorts/J3-qjc76P4I",
-    "uploadedAt": "2026-03-22T06:33:52.088Z"
+    "videoId": "oFkELrnHjAo",
+    "url": "https://youtube.com/shorts/oFkELrnHjAo",
+    "uploadedAt": "2026-03-22T07:04:29.131Z"
   },
-  "good-sleep-hygiene": {
-    "videoId": "SEcJxE6-f5s",
-    "url": "https://youtube.com/shorts/SEcJxE6-f5s",
-    "uploadedAt": "2026-03-22T06:33:57.298Z"
+  "exercise-energy": {
+    "videoId": "WKvjEqEPkvU",
+    "url": "https://youtube.com/shorts/WKvjEqEPkvU",
+    "uploadedAt": "2026-03-22T07:04:33.629Z"
   },
-  "habits-hydration-routine": {
-    "videoId": "3lDIv3wwz7I",
-    "url": "https://youtube.com/shorts/3lDIv3wwz7I",
-    "uploadedAt": "2026-03-22T06:34:02.453Z"
-  },
-  "post-workout-nutrition": {
-    "videoId": "OJTVJb9O1eg",
-    "url": "https://youtube.com/shorts/OJTVJb9O1eg",
-    "uploadedAt": "2026-03-22T06:34:07.497Z"
-  },
-  "posture-sitting-desk": {
-    "videoId": "IlsioQNwB5Y",
-    "url": "https://youtube.com/shorts/IlsioQNwB5Y",
-    "uploadedAt": "2026-03-22T06:34:12.779Z"
-  },
-  "urine-check": {
-    "videoId": "Sbu-itxF7Is",
-    "url": "https://youtube.com/shorts/Sbu-itxF7Is",
-    "uploadedAt": "2026-03-22T06:34:17.905Z"
+  "exercise-spot-reduction": {
+    "videoId": "nCiEWOG9csk",
+    "url": "https://youtube.com/shorts/nCiEWOG9csk",
+    "uploadedAt": "2026-03-22T07:04:37.979Z"
   }
 }
