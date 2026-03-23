@@ -207,8 +207,8 @@ async function main() {
       }
     } catch (e) {
       console.error(`\n❌ Failed ${path.basename(file)}: ${e.message}`);
-      if (e.message.includes('quotaExceeded')) {
-        console.error('YouTube API daily quota exceeded. Try again tomorrow.');
+      if (e.message.includes('quotaExceeded') || e.message.includes('exceeded the number of videos')) {
+        console.error('YouTube upload limit reached. Try again tomorrow.');
         break;
       }
     }
