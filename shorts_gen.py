@@ -23,7 +23,8 @@ from pathlib import Path
 # Constants
 # ---------------------------------------------------------------------------
 
-PIPER_MODEL = Path(__file__).parent / "piper" / "si_LK-sinhala-medium.onnx"
+PIPER_MODEL_SINHALA = Path(__file__).parent / "piper" / "si_LK-sinhala-medium.onnx"
+PIPER_MODEL_ENGLISH = Path(__file__).parent / "piper" / "en_US-lessac-medium.onnx"
 LOGO_PATH = Path(__file__).parent / "branding" / "logo.jpg"
 TIPS_DIR = Path(__file__).parent / "content" / "tips"
 
@@ -168,11 +169,15 @@ def list_all_tips() -> list[Path]:
 # TTS synthesis
 # ---------------------------------------------------------------------------
 
-def synthesize_tts(text: str, output_wav: str) -> None:
-    """
-    Generate Sinhala speech using Piper TTS.
+def _detect_language(text: str) -> str:
+    """Detect if text is primarily Sinhala or English."""
+    sinhala_chars = sum(1 for c in text if '\u0D80' <= c <= '\u0DFF')
+    return "si" if sinhala_chars > len(text) * 0.3 else "en"
 
-    Requires piper-tts package and si_LK-sinhala-medium.onnx model in ./piper/.
+
+def synthesize_tts(text: str, output_wav: str, lang: str = "auto") -> None:
+    """
+    Generate speech using Piper TTS. Auto-detects language.
     """
     try:
         import warnings
@@ -183,16 +188,21 @@ def synthesize_tts(text: str, output_wav: str) -> None:
         print("ERROR: piper-tts not installed. Run: pip install piper-tts", file=sys.stderr)
         sys.exit(1)
 
-    if not PIPER_MODEL.exists():
+    if lang == "auto":
+        lang = _detect_language(text)
+
+    model_path = PIPER_MODEL_SINHALA if lang == "si" else PIPER_MODEL_ENGLISH
+
+    if not model_path.exists():
         print(
-            f"ERROR: Piper model not found at {PIPER_MODEL}\n"
-            "Download si_LK-sinhala-medium.onnx from Piper releases and place it in ./piper/",
+            f"ERROR: Piper model not found at {model_path}\n"
+            f"Download the {'Sinhala' if lang == 'si' else 'English'} model and place it in ./piper/",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    print(f"  [TTS] Loading Piper model...", end=" ", flush=True)
-    voice = PiperVoice.load(str(PIPER_MODEL))
+    print(f"  [TTS] Loading Piper model ({lang})...", end=" ", flush=True)
+    voice = PiperVoice.load(str(model_path))
     print("done")
     print(f"  [TTS] Synthesizing speech → {output_wav}")
 
@@ -411,12 +421,21 @@ def build_video(
             lines.append(current)
         return lines
 
+    is_english = _detect_language(title) == "en"
+    title_wrap_chars = 15 if is_english else 8
+
+    # Use brand font for English titles, Sinhala font for Sinhala
+    if is_english:
+        fnt_title    = load_font(font_brand_bold_path, 100)
+        fnt_title_sm = load_font(font_brand_bold_path, 80)
+        fnt_body     = load_font(font_brand_reg_path,  38)
+
     title_words = title.split()
     title_font  = fnt_title
-    title_lines = wrap_title_words(title_words, max_chars=8)
+    title_lines = wrap_title_words(title_words, max_chars=title_wrap_chars)
     if len(title_lines) > 3:
         title_font  = fnt_title_sm
-        title_lines = wrap_title_words(title_words, max_chars=8)
+        title_lines = wrap_title_words(title_words, max_chars=title_wrap_chars)
 
     line_h = title_font.size + LINE_SPACING
 
@@ -462,7 +481,8 @@ def build_video(
     BODY_PAD_BOT = 28
     DYK_H        = 28 + 16   # "DID YOU KNOW?" line height + gap below
 
-    body_lines  = _wrap_sinhala(subtitle_text, max_chars=20)
+    body_wrap_chars = 38 if _detect_language(subtitle_text) == "en" else 20
+    body_lines  = _wrap_sinhala(subtitle_text, max_chars=body_wrap_chars)
     body_line_h = fnt_body.size + 14
     card_text_h = len(body_lines) * body_line_h
     card_h      = BODY_PAD_TOP + DYK_H + card_text_h + BODY_PAD_BOT
