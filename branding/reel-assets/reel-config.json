@@ -1,0 +1,89 @@
+{
+  "version": "1.0",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "codec": "libx264",
+    "audio_codec": "aac",
+    "audio_bitrate": "128k"
+  },
+  "structure": {
+    "intro": {
+      "duration": 2.0,
+      "frame": "branding/reel-assets/intro-frame.png",
+      "clip": "branding/reel-assets/intro-clip.mp4",
+      "ken_burns": "zoom_out",
+      "note": "No voice during intro, BGM starts here"
+    },
+    "scenes": {
+      "count": 3,
+      "distribution": [0.3, 0.4, 0.3],
+      "note": "Duration auto-calculated from narration length. 30/40/30 split.",
+      "ken_burns_styles": [
+        "zoom_in",
+        "slow_pan",
+        "zoom_out"
+      ]
+    },
+    "outro": {
+      "duration": 3.0,
+      "frame": "branding/reel-assets/outro-frame.png",
+      "clip": "branding/reel-assets/outro-clip.mp4",
+      "ken_burns": "slow_zoom_in",
+      "note": "Starts AFTER voice narration ends"
+    }
+  },
+  "timing": {
+    "voice_delay": 2.0,
+    "voice_buffer_after": 0.5,
+    "note": "total = intro + narration_duration + buffer + outro"
+  },
+  "tts": {
+    "engine": "piper",
+    "model": "piper/en_US-lessac-medium.onnx",
+    "length_scale": 1.15,
+    "note": "Calm, relaxed delivery (15% slower than normal)"
+  },
+  "audio": {
+    "bgm": "branding/reel-assets/bgm-lofi.mp3",
+    "bgm_volume": 0.20,
+    "voice_volume": 1.0,
+    "bgm_fade_in": 1.5,
+    "bgm_fade_out": 2.0
+  },
+  "visuals": {
+    "font": "~/.local/share/fonts/NotoSans-Bold.ttf",
+    "colors": {
+      "orange": "#F97316",
+      "white": "#FFFFFF",
+      "dark": "#0C0C0E"
+    },
+    "logo": "branding/logo.jpg",
+    "logo_size": 55,
+    "logo_position": [990, 30],
+    "watermark_text": "qualitylife.lk",
+    "watermark_position": "bottom_center",
+    "watermark_y": 1860,
+    "text_shadow_offset": 3
+  },
+  "imagen": {
+    "model": "imagen-4.0-fast-generate-001",
+    "aspect_ratio": "9:16",
+    "scenes_per_reel": 3,
+    "prompt_suffix": ", no text no watermarks, 9:16 vertical"
+  },
+  "ken_burns_filters": {
+    "zoom_in": "scale=1200:2133,zoompan=z='1+0.04*on/30':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s=1080x1920:fps=30",
+    "slow_pan": "scale=1200:2133,zoompan=z='1.08':x='60+30*sin(on/30*0.3)':y='ih/2-(ih/zoom/2)':d={frames}:s=1080x1920:fps=30",
+    "zoom_out": "scale=1200:2133,zoompan=z='1.15-0.05*on/30':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s=1080x1920:fps=30",
+    "slow_zoom_in": "scale=1200:2133,zoompan=z='1+0.02*on/30':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s=1080x1920:fps=30"
+  },
+  "branding": {
+    "name": "QUALITY LIFE FITNESS",
+    "tagline": "Your Daily Health Tips",
+    "location": "AREA6 - KADAWATHA",
+    "website": "qualitylife.lk",
+    "social": "@qualitylifefitness"
+  }
+}
