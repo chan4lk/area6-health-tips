@@ -1,0 +1,56 @@
+{
+  "version": "1.0",
+  "format": {
+    "width": 1080,
+    "height": 1080,
+    "quality": 95
+  },
+  "imagen": {
+    "model": "imagen-4.0-fast-generate-001",
+    "aspect_ratio": "1:1",
+    "prompt_suffix": ", no text no watermarks no logos"
+  },
+  "visuals": {
+    "font": "~/.local/share/fonts/NotoSans-Bold.ttf",
+    "colors": {
+      "orange": "#F97316",
+      "white": "#FFFFFF"
+    },
+    "darken_overlay": [0, 0, 0, 60],
+    "title": {
+      "font_size": 54,
+      "y_start": 200,
+      "line_height": 68,
+      "centered": true,
+      "shadow_offset": 2
+    },
+    "subtitle": {
+      "font_size": 26,
+      "y_start": 880,
+      "line_height": 36,
+      "x": 52,
+      "shadow_offset": 1
+    },
+    "accent_line": {
+      "y": 870,
+      "x_start": 52,
+      "x_end": 200,
+      "height": 4,
+      "color": "#F97316"
+    },
+    "logo": {
+      "path": "branding/logo.jpg",
+      "size": 80,
+      "position": [960, 950],
+      "circular": true
+    },
+    "watermark": {
+      "text": "qualitylife.lk",
+      "font_size": 20,
+      "centered_under_logo": true,
+      "y": 1040,
+      "color": [255, 255, 255, 150],
+      "note": "x is auto-calculated to center under logo"
+    }
+  }
+}
