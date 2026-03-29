@@ -145,73 +145,38 @@ function listBatches() {
     .sort();
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  const isPublic = args.includes('--public');
-  const dryRun = args.includes('--dry-run');
-  const isLatest = args.includes('--latest');
-  const batchIdx = args.indexOf('--batch');
+async function uploadBatch(youtube, batch, isPublic, dryRun) {
+  const batchDir = path.join(OUTPUT_DIR, batch);
+  if (!fs.existsSync(batchDir)) return { uploaded: 0, total: 0, rateLimited: false };
 
-  let batch, files;
-
-  if (batchIdx >= 0 && args[batchIdx + 1]) {
-    batch = args[batchIdx + 1];
-  } else if (isLatest) {
-    const batches = listBatches();
-    if (!batches.length) { console.log('No batches found.'); return; }
-    batch = batches[batches.length - 1];
-  }
-
-  if (batch) {
-    const batchDir = path.join(OUTPUT_DIR, batch);
-    if (!fs.existsSync(batchDir)) {
-      console.error(`Batch not found: ${batchDir}`);
-      console.error(`Available: ${listBatches().join(', ')}`);
-      process.exit(1);
-    }
-    files = fs.readdirSync(batchDir)
-      .filter(f => f.endsWith('.mp4'))
-      .map(f => path.join(batchDir, f));
-  } else {
-    const explicit = args.filter(a => !a.startsWith('--'));
-    if (!explicit.length) {
-      console.error('Usage: node scripts/youtube-upload.js --batch <name>|--latest|<file.mp4> [--public] [--dry-run]');
-      console.error(`\nAvailable batches: ${listBatches().join(', ')}`);
-      process.exit(1);
-    }
-    files = explicit.map(f => path.resolve(f));
-    // Infer batch from path
-    batch = path.basename(path.dirname(files[0]));
-    if (batch === 'output') batch = 'misc';
-  }
+  const files = fs.readdirSync(batchDir)
+    .filter(f => f.endsWith('.mp4'))
+    .map(f => path.join(batchDir, f));
 
   const manifest = loadManifest(batch);
   const toUpload = [];
   for (const f of files) {
     const id = path.basename(f, '.mp4');
-    if (manifest.uploads[id]) {
-      console.log(`⏭️  Already uploaded: ${id} → ${manifest.uploads[id].url}`);
-    } else {
-      const tip = findTip(f, batch);
-      if (!tip) { console.error(`⚠️  No tip JSON for ${id}, skipping`); continue; }
-      toUpload.push({ file: f, id, tip });
-    }
+    if (manifest.uploads[id]) continue;
+    const tip = findTip(f, batch);
+    if (!tip) { console.error(`⚠️  No tip JSON for ${id}, skipping`); continue; }
+    toUpload.push({ file: f, id, tip });
   }
 
-  if (!toUpload.length) { console.log('\n✅ Nothing new to upload.'); return; }
-  console.log(`\n📦 ${toUpload.length} video(s) to upload from batch "${batch}"${isPublic ? ' (PUBLIC)' : ' (PRIVATE)'}${dryRun ? ' [DRY RUN]' : ''}`);
+  if (!toUpload.length) return { uploaded: 0, total: 0, rateLimited: false };
+
+  console.log(`\n📦 Batch "${batch}": ${toUpload.length} video(s)${isPublic ? ' (PUBLIC)' : ' (PRIVATE)'}${dryRun ? ' [DRY RUN]' : ''}`);
 
   if (dryRun) {
     toUpload.forEach(({ tip }) => console.log(`  - ${tip.id}: ${tip.title}`));
-    return;
+    return { uploaded: 0, total: toUpload.length, rateLimited: false };
   }
 
-  const auth = await getAuth();
-  const youtube = google.youtube({ version: 'v3', auth });
   const pubDir = path.join(PUBLISHED_DIR, batch);
   fs.mkdirSync(pubDir, { recursive: true });
 
   let uploaded = 0;
+  let rateLimited = false;
   for (const { file, id, tip } of toUpload) {
     try {
       const result = await uploadOne(youtube, file, tip, isPublic);
@@ -234,16 +199,67 @@ async function main() {
       console.error(`\n❌ Failed ${path.basename(file)}: ${e.message}`);
       if (e.message.includes('quotaExceeded') || e.message.includes('exceeded the number of videos')) {
         console.error('YouTube upload limit reached. Try again tomorrow.');
+        rateLimited = true;
         break;
       }
     }
 
-    if (toUpload.indexOf(toUpload.find(t => t.id === id)) < toUpload.length - 1) {
-      await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  return { uploaded, total: toUpload.length, rateLimited };
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const isPublic = args.includes('--public');
+  const dryRun = args.includes('--dry-run');
+  const isLatest = args.includes('--latest');
+  const isAll = args.includes('--all');
+  const batchIdx = args.indexOf('--batch');
+
+  let batches = [];
+
+  if (batchIdx >= 0 && args[batchIdx + 1]) {
+    batches = [args[batchIdx + 1]];
+  } else if (isAll) {
+    batches = listBatches();
+  } else if (isLatest) {
+    const all = listBatches();
+    if (!all.length) { console.log('No batches found.'); return; }
+    batches = [all[all.length - 1]];
+  } else {
+    const explicit = args.filter(a => !a.startsWith('--'));
+    if (!explicit.length) {
+      console.error('Usage: node scripts/youtube-upload.js --all|--latest|--batch <name>|<file.mp4> [--public] [--dry-run]');
+      console.error(`\nAvailable batches: ${listBatches().join(', ')}`);
+      process.exit(1);
+    }
+    // Single file upload — infer batch
+    const files = explicit.map(f => path.resolve(f));
+    const batch = path.basename(path.dirname(files[0]));
+    batches = [batch === 'output' ? 'misc' : batch];
+  }
+
+  if (!batches.length) { console.log('No batches found in output/.'); return; }
+
+  let auth, youtube;
+  if (!dryRun) {
+    auth = await getAuth();
+    youtube = google.youtube({ version: 'v3', auth });
+  }
+
+  let totalUploaded = 0;
+  for (const batch of batches) {
+    const result = await uploadBatch(youtube, batch, isPublic, dryRun);
+    totalUploaded += result.uploaded;
+    if (result.rateLimited) {
+      console.log('\n⛔ Rate limited — stopping. Will continue tomorrow.');
+      break;
     }
   }
 
-  console.log(`\n🎉 Done! ${uploaded}/${toUpload.length} uploaded to batch "${batch}".`);
+  console.log(`\n🎉 Total uploaded: ${totalUploaded}`);
 }
 
 main().catch(e => {

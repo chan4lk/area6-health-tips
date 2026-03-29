@@ -382,6 +382,7 @@ def build_video(
     pb        = draw.textbbox((0, 0), pill_text, font=fnt_pill)
     pill_tw   = pb[2] - pb[0]
     pill_th   = pb[3] - pb[1]
+    pill_ty   = pb[1]             # top offset from textbbox
     PILL_X    = 50
     PILL_Y    = 155
     PILL_H    = 52
@@ -391,8 +392,10 @@ def build_video(
         radius=PILL_H // 2,
         fill=ORANGE,
     )
+    # Center text vertically: account for textbbox top offset
+    text_y = PILL_Y + (PILL_H - pill_th) // 2 - pill_ty
     draw.text(
-        (PILL_X + 20, PILL_Y + (PILL_H - pill_th) // 2),
+        (PILL_X + 20, text_y),
         pill_text, font=fnt_pill, fill=WHITE,
     )
 
@@ -534,21 +537,7 @@ def build_video(
     draw.text((TEXT_X, BAR_Y + 18), "@AREA6_OFFICIAL", font=fnt_handle, fill=WHITE)
     draw.text((TEXT_X, BAR_Y + 52), cat_label,          font=fnt_cat,    fill=GRAY)
 
-    sub_text = "SUBSCRIBE"
-    sb       = draw.textbbox((0, 0), sub_text, font=fnt_subscribe)
-    sub_tw   = sb[2] - sb[0]
-    sub_th   = sb[3] - sb[1]
-    SP_X     = 24
-    SP_Y     = 14
-    sub_pw   = sub_tw + 2 * SP_X
-    sub_ph   = sub_th + 2 * SP_Y
-    sub_px   = WIDTH - 30 - sub_pw
-    sub_py   = BAR_Y + (100 - sub_ph) // 2
-    draw.rounded_rectangle(
-        [sub_px, sub_py, sub_px + sub_pw, sub_py + sub_ph],
-        radius=sub_ph // 2, fill=ORANGE,
-    )
-    draw.text((sub_px + SP_X, sub_py + SP_Y), sub_text, font=fnt_subscribe, fill=WHITE)
+    # SUBSCRIBE button removed — platform handles this
 
     # ---------------------------------------------------- save frame as PNG
     frame_rgb = frame.convert("RGB")
